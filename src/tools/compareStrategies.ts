@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { DEFAULT_WINDOW_NOTE, resolveWindow } from "../config.js";
 import { analyzePortfolio, overlapNights, parseISODate } from "../core/calc.js";
 import { simulateFillGaps, simulateMinStayUplift } from "../core/simulate.js";
 import type { PortfolioAnalysis, Reservation } from "../core/types.js";
@@ -21,9 +23,39 @@ const sign = (n: number, fmt: (x: number) => string): string =>
 const pp = (n: number): string => `${n.toFixed(1)} pp`;
 const signedCount = (n: number): string => `${n >= 0 ? "+" : "-"}${Math.abs(n)}`;
 
+/** Zod-skeema — index.ts rekisteröi tämän sellaisenaan (yksi totuus, testattavissa). */
+export const compareStrategiesInputSchema = {
+  from: z
+    .string()
+    .optional()
+    .describe("Period start, YYYY-MM-DD (optional — defaults to last 30 + next 90 days)"),
+  to: z
+    .string()
+    .optional()
+    .describe("Period end (exclusive), YYYY-MM-DD (optional — defaults to last 30 + next 90 days)"),
+  discount_pct: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Strategy A: gap night price discount as a percentage of the property's ADR (default 40)"),
+  min_stay: z
+    .number()
+    .int()
+    .min(1)
+    .optional()
+    .describe("Strategy B: minimum stay in nights — bookings shorter than this are dropped (default 3)"),
+  uplift_pct: z
+    .number()
+    .min(0)
+    .max(100)
+    .optional()
+    .describe("Strategy B: price uplift percentage for the remaining bookings (default 10)"),
+};
+
 export interface CompareArgs {
-  from: string;
-  to: string;
+  from?: string;
+  to?: string;
   discount_pct?: number;
   min_stay?: number;
   uplift_pct?: number;
@@ -90,11 +122,12 @@ export function formatComparison(
   to: string,
   sourceLabel: string,
   dataNote: string,
+  isDefaultWindow = false,
 ): string {
   const [base, a, b] = scenarios;
 
   const parts: string[] = [];
-  parts.push(`## Strategy comparison ${from} → ${to}`);
+  parts.push(`## Strategy comparison ${from} → ${to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`);
   parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
   parts.push(`${scenarioTable(scenarios)}\n_Turnovers = number of bookings touching the period._`);
   parts.push([deltaSentence("A", a, base), deltaSentence("B", b, base)].join("\n"));
@@ -120,6 +153,7 @@ export function formatComparison(
 }
 
 export async function runCompareStrategies(args: CompareArgs): Promise<string> {
+  const { from, to, isDefault } = resolveWindow(args.from, args.to);
   const discountPct = args.discount_pct ?? 40;
   const minStay = args.min_stay ?? 3;
   const upliftPct = args.uplift_pct ?? 10;
@@ -127,45 +161,45 @@ export async function runCompareStrategies(args: CompareArgs): Promise<string> {
   const costSource = costSourceFromEnv(process.env);
   const reservationSource = reservationSourceFromEnv(process.env);
 
-  const reservations = await reservationSource.getReservations(args.from, args.to);
+  const reservations = await reservationSource.getReservations(from, to);
   // Sama kohdistuskaskadi kuin analyze_portfoliossa (id → koodi → komposiitti
   // → keskiarvo) — samat luvut samalla jaksolla molemmissa tooleissa.
   const { costs, matchNote } = await resolveCosts(
     costSource,
     reservations,
-    args.from,
-    args.to,
+    from,
+    to,
     avgFallbackFromEnv(process.env),
   );
 
-  const baseline = analyzePortfolio(reservations, costs, args.from, args.to);
-  const simA = simulateFillGaps(reservations, costs, args.from, args.to, { discountPct });
-  const simB = simulateMinStayUplift(reservations, costs, args.from, args.to, {
+  const baseline = analyzePortfolio(reservations, costs, from, to);
+  const simA = simulateFillGaps(reservations, costs, from, to, { discountPct });
+  const simB = simulateMinStayUplift(reservations, costs, from, to, {
     minStay,
     upliftPct,
   });
-  const analysisA = analyzePortfolio(simA.reservations, simA.costs, args.from, args.to);
-  const analysisB = analyzePortfolio(simB.reservations, simB.costs, args.from, args.to);
+  const analysisA = analyzePortfolio(simA.reservations, simA.costs, from, to);
+  const analysisB = analyzePortfolio(simB.reservations, simB.costs, from, to);
 
   const scenarios: [Scenario, Scenario, Scenario] = [
     {
       label: "Baseline",
       analysis: baseline,
-      turnovers: countTurnovers(reservations, args.from, args.to),
+      turnovers: countTurnovers(reservations, from, to),
     },
     {
       label: `A: fill gap nights (${discountPct}% off)`,
       analysis: analysisA,
-      turnovers: countTurnovers(simA.reservations, args.from, args.to),
+      turnovers: countTurnovers(simA.reservations, from, to),
     },
     {
       label: `B: min stay ${minStay} nights + prices +${upliftPct}%`,
       analysis: analysisB,
-      turnovers: countTurnovers(simB.reservations, args.from, args.to),
+      turnovers: countTurnovers(simB.reservations, from, to),
     },
   ];
 
   const dataNote =
     `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
-  return formatComparison(scenarios, args.from, args.to, costSource.label, dataNote);
+  return formatComparison(scenarios, from, to, costSource.label, dataNote, isDefault);
 }

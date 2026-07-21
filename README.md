@@ -10,16 +10,16 @@ claude mcp add margin -- npx -y night-margin-mcp
 
 That's it — **works with zero config on synthetic demo data**. Open Claude and ask:
 
-> Analyze my portfolio for June 2026 (2026-06-01 → 2026-07-01)
+> Where is my portfolio leaking money?
 
 You'll get the leak figure, the net-per-night metric, and your best and worst properties in under a minute. When you're ready to run the analysis against *your own* Wheelhouse portfolio, see [Wheelhouse API key](#wheelhouse-api-key) below.
 
 ## Example prompts
 
-The server provides three tools. Try these directly in Claude:
+The server provides three tools. No dates needed — `analyze_portfolio` and `compare_strategies` default to the last 30 + next 90 days (recent turnovers + your booking horizon); pass `from`/`to` to change. Try these directly in Claude:
 
 1. **`analyze_portfolio`** — where is the money leaking?
-   > Analyze my portfolio for 2026-06-01 → 2026-07-01. Which properties have the weakest net per night, and how much leak comes from net-negative bookings?
+   > Where is my portfolio leaking money?
 
 2. **`compare_strategies`** — gross vs. net in the same picture:
    > Compare two strategies for June 2026: (A) fill gap nights at a 40% discount and (B) raise the minimum stay to three nights with a 10% price increase. Which one delivers the better net per night?

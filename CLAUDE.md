@@ -12,7 +12,9 @@ Rakennamme **MCP-serverin, joka näyttää jokaisen hinnoittelupäätöksen myö
 
 Erottautuminen: meillä on CleanHub (oma kenttäoperaatioalusta) → todelliset vaihtokustannukset per varaus. Muut käyttäjät ajavat työkalua yhdellä keskiarvoluvulla tai CSV:llä.
 
-Käyttäjät: hackathonin osallistujat asentavat tämän omaan Claudeensa ja ajavat omaa portfoliotaan vasten. Voitto ratkeaa avoimella äänestyksellä → **asennuksen ja ensimmäisen tuloksen pitää onnistua alle minuutissa**.
+Käyttäjät: hackathonin osallistujat ja tuomarit asentavat tämän omaan Claudeensa ja ajavat omaa portfoliotaan vasten.
+
+**Arvostelu (KORJATTU kickoff-slideista 21.7. — EI avoin äänestys):** tuomarikriteerit Business Value (arvoa asiakkaille tänään) · Completeness ("fully functional and near-final, not a mockup") · Technical Execution (RM API + MCP + integraatiot) · Creativity · Category Fit. Pääkategoria: **Best Build from a Property Manager** (LEAD-päätös P6). Submissio: lomake + **2–3 min Loom-demovideo** ennen to 23.7. keskiyötä PST (= pe 10:00 Suomen aikaa). Asennus + ensimmäinen tulos < 60 s säilyy tavoitteena (syöttää Completeness- ja Business Value -kriteerejä).
 
 ## Arkkitehtuuri
 

@@ -261,6 +261,25 @@ describe("formatComparison", () => {
     // fixtuurissa A: brutto +120 €, netto −40 € → ydinviesti mukana
     expect(text).toContain("gross-optimizing fill is a net loss");
     expect(text).toContain("**Summary:** Best net/night: Baseline");
+    // eksplisiittisellä ikkunalla EI oletusikkunahuomautusta
+    expect(text).not.toContain("default window");
+  });
+
+  it("oletusikkunalla otsikkoon tulee default window -huomautus", () => {
+    const { reservations, costs } = fixture();
+    const base = analyzePortfolio(reservations, costs, FROM, TO);
+    const scenario = { label: "Baseline", analysis: base, turnovers: countTurnovers(reservations, FROM, TO) };
+    const text = formatComparison(
+      [scenario, scenario, scenario],
+      FROM,
+      TO,
+      "manual (test)",
+      "",
+      true,
+    );
+    expect(text).toContain(
+      `## Strategy comparison ${FROM} → ${TO} (default window: last 30 + next 90 days — pass from/to to change)`,
+    );
   });
 });
 
