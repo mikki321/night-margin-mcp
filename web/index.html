@@ -331,7 +331,7 @@ function openDetail(p, el) {
   detail.hidden = false;
 }
 document.addEventListener("click", e => {
-  if (!e.target.closest("[data-pid]") && !e.target.closest("#detail")) closeDetail();
+  if (!e.target.closest("[data-pid]") && !e.target.closest("#detail") && !e.target.closest(".seg")) closeDetail();
 });
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
 
