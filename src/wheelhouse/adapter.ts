@@ -208,6 +208,13 @@ export function wheelhouseReservations(
       // jaksoleikkaus [from, to): mukaan varaukset jotka leikkaavat ikkunaa
       return all.filter((r) => r.checkin < to && r.checkout > from);
     },
+    // Aktiivisten listausten nimet — analyze_portfolion käyttöastenimittäjä
+    // sisältää näin myös nollavarauskohteet. listListings on cachetettu
+    // clientissä → ei ylimääräistä verkkokutsua getReservationsin jälkeen.
+    async listPropertyIds() {
+      const listings = (await client.listListings()).filter((l) => l.is_active !== false);
+      return listings.map(listingFromDocumented);
+    },
   };
   return source;
 }

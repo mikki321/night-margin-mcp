@@ -193,6 +193,14 @@ export async function runProposeDecisions(
     }
   }
 
+  // Löydös 6: yöt ilman hintadataa ohitetaan lattiavertailusta — "ei ehdotuksia"
+  // -viesti ei saa yliväittää. M = hinnalliset aukkoyöt, N = kaikki aukkoyöt.
+  let pricedGapNights = 0;
+  for (const [propertyId, gapDates] of gaps) {
+    const priced = new Set((priceRecsByProperty.get(propertyId) ?? []).map((p) => p.stay_date));
+    pricedGapNights += gapDates.filter((d) => priced.has(d)).length;
+  }
+
   const proposals = proposeGapFloorDecisions({
     reservations,
     costsById: costs,
@@ -248,11 +256,19 @@ export async function runProposeDecisions(
   );
 
   if (proposals.length === 0) {
-    parts.push(
-      totalGapNights === 0
-        ? "No gap nights in the window — nothing to propose."
-        : `No proposals — prices for all ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window are at or above the cost floor (turnover + travel + minimum margin). That's good: nothing is priced below cost.`,
-    );
+    let message: string;
+    if (totalGapNights === 0) {
+      message = "No gap nights in the window — nothing to propose.";
+    } else if (pricedGapNights === 0) {
+      message = `No proposals — none of the ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window have price data to compare against the cost floor.`;
+    } else if (pricedGapNights < totalGapNights) {
+      message =
+        `No proposals — all ${pricedGapNights} priced gap night${pricedGapNights === 1 ? "" : "s"} (of ${totalGapNights}) are at or above the cost floor ` +
+        `(turnover + travel + minimum margin); the remaining ${totalGapNights - pricedGapNights} ha${totalGapNights - pricedGapNights === 1 ? "s" : "ve"} no price data and ${totalGapNights - pricedGapNights === 1 ? "was" : "were"} not compared.`;
+    } else {
+      message = `No proposals — prices for all ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window are at or above the cost floor (turnover + travel + minimum margin). That's good: nothing is priced below cost.`;
+    }
+    parts.push(message);
     return parts.join("\n\n");
   }
 

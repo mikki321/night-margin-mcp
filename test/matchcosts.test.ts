@@ -153,16 +153,25 @@ describe("matchCosts — kaskadin haarat", () => {
 });
 
 describe("formatMatchReport", () => {
-  it("näyttää vain nollasta poikkeavat luokat", () => {
+  it("monilähteinen: täysmuoto + kokonaismäärä", () => {
     expect(
       formatMatchReport({ by_id: 41, by_code: 0, by_composite: 6, by_fallback: 3 }),
-    ).toBe("Cost attribution: 41 id, 6 composite, 3 average");
+    ).toBe("Cost attribution: 41 by reservation_id, 6 by composite key, 3 by average fallback (50 total)");
   });
 
   it("näyttää koodiluokan kun sitä on", () => {
     expect(
       formatMatchReport({ by_id: 2, by_code: 1, by_composite: 0, by_fallback: 0 }),
-    ).toBe("Cost attribution: 2 id, 1 code");
+    ).toBe("Cost attribution: 2 by reservation_id, 1 by confirmation code (3 total)");
+  });
+
+  it("yksi mätsityyppi: N/N bookings matched by -muoto", () => {
+    expect(
+      formatMatchReport({ by_id: 289, by_code: 0, by_composite: 0, by_fallback: 0 }),
+    ).toBe("Cost attribution: 289/289 bookings matched by reservation_id");
+    expect(
+      formatMatchReport({ by_id: 0, by_code: 0, by_composite: 0, by_fallback: 1 }),
+    ).toBe("Cost attribution: 1/1 booking matched by average fallback");
   });
 
   it("palauttaa tyhjän kun kaikki luokat ovat nollia", () => {

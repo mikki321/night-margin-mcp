@@ -106,8 +106,20 @@ export async function runApplyDecision(
     const payloadBlocks = payloads
       .map((p) => `PUT ${urlPath}\n${JSON.stringify(p, null, 2)}`)
       .join("\n\n");
+    // Osittaisen kirjoituksen retry-tila: aiempi apply ehti kirjoittaa osan
+    // rangeista ennen virhettä → esikatselu ei saa väittää ettei mitään ole
+    // kirjoitettu, vaan listaa jo kirjoitetut rangeat.
+    const priorWrites = decision.applied_ranges ?? [];
+    const statusLine =
+      priorWrites.length > 0
+        ? `Note: a previous apply attempt already wrote ${priorWrites.length} of ${ranges.length} range${ranges.length === 1 ? "" : "s"}: ` +
+          `${priorWrites.map((r) => `${r.start_date} → ${r.end_date}`).join(", ")}. ` +
+          `Confirming retries the write (all ranges are re-put at the same price); ` +
+          `roll back what was already written with: revert_decision {"decision_id": "${decision.id}", "confirm": true}. ` +
+          `To execute: apply_decision {"decision_id": "${decision.id}", "confirm": true}`
+        : `Nothing has been written. To execute: apply_decision {"decision_id": "${decision.id}", "confirm": true}`;
     return [
-      `## Dry run — decision ${decision.id} (nothing written)`,
+      `## Dry run — decision ${decision.id} (${priorWrites.length > 0 ? "this preview writes nothing" : "nothing written"})`,
       `Listing ${decision.listing_id} (${decision.property_id}) · channel ${decision.channel}`,
       `This would write ${ranges.length} custom rate range${ranges.length === 1 ? "" : "s"}:\n\n${payloadBlocks}`,
       `Effect: fixes ${decision.dates.length} gap night${decision.dates.length === 1 ? "" : "s"} at ${eur(decision.floor_price)}/night ` +
@@ -119,7 +131,7 @@ export async function runApplyDecision(
               "and a fresh propose_decisions run against your own portfolio.",
           ]
         : []),
-      `Nothing has been written. To execute: apply_decision {"decision_id": "${decision.id}", "confirm": true}`,
+      statusLine,
     ].join("\n\n");
   }
 

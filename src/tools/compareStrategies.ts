@@ -129,7 +129,11 @@ export function formatComparison(
   const parts: string[] = [];
   parts.push(`## Strategy comparison ${from} → ${to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`);
   parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
-  parts.push(`${scenarioTable(scenarios)}\n_Turnovers = number of bookings touching the period._`);
+  parts.push(
+    `${scenarioTable(scenarios)}\n_Turnovers = number of bookings touching the period._\n` +
+      // Tuomarisimulaation löydös 1: A:n 100 % -täyttöoletus näkyviin.
+      `_Strategy A assumes every gap night sells at the discounted price — an upper bound._`,
+  );
   parts.push([deltaSentence("A", a, base), deltaSentence("B", b, base)].join("\n"));
 
   const dGrossA = a.analysis.totals.gross - base.analysis.totals.gross;

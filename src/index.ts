@@ -19,6 +19,7 @@ server.registerTool(
     description:
       "Computes a short-term rental portfolio's net after turnover costs (cleaning, laundry, travel): " +
       "net per available night, leak (net-negative bookings), and the best and worst properties. " +
+      "Read-only — never changes any prices. " +
       "from/to are optional — without them the window defaults to the last 30 + next 90 days.",
     inputSchema: analyzePortfolioInputSchema,
   },
@@ -44,6 +45,8 @@ server.registerTool(
       "A fills gap nights at a discount (default 40% off the property's ADR), B drops bookings below a minimum " +
       "stay and raises the remaining prices (default min 3 nights, +10%). Shows gross, net, net/night, " +
       "occupancy, turnovers, and leak per scenario — revealing when gross-optimizing fill is a net loss. " +
+      "Strategy A assumes every gap night sells at the discounted price — an upper bound, not a forecast. " +
+      "Read-only simulation — never changes any prices. " +
       "from/to are optional — without them the window defaults to the last 30 + next 90 days.",
     inputSchema: compareStrategiesInputSchema,
   },
@@ -67,7 +70,8 @@ server.registerTool(
     description:
       "Checks whether filling a single gap night is worth it: computes the floor price (turnover cost + travel + minimum margin MIN_MARGIN) " +
       "from the median of the property's actual cost rows and compares the candidate price against it → FILL if price ≥ floor, otherwise SKIP. " +
-      "If the date is already booked, reports which booking covers it.",
+      "The verdict reports both the floor clearance and the actual net after turnover costs. " +
+      "If the date is already booked, reports which booking covers it. Read-only — never changes any prices.",
     inputSchema: {
       property_id: z.string().min(1).describe("Property identifier in the reservation data (property_id)"),
       date: z.string().describe("Night to check, YYYY-MM-DD"),
@@ -100,7 +104,7 @@ server.registerTool(
       "recommendation is below your cost floor (turnover + travel + MIN_MARGIN) and proposes fixing those " +
       "nights at the floor so they can't sell below cost. Proposals are saved to the local decision log " +
       "(NM_STATE_DIR, default ~/.night-margin). Window defaults to the next 30 days. " +
-      "Apply a proposal for real with apply_decision.",
+      "Proposing never changes prices — prices change only when a decision is applied with apply_decision and explicit confirmation.",
     inputSchema: proposeDecisionsInputSchema,
   },
   async (args) => {
@@ -122,7 +126,8 @@ server.registerTool(
     title: "Apply a pricing decision to Wheelhouse",
     description:
       "Applies a proposed pricing decision to Wheelhouse for real (writes fixed custom rates for the decision's " +
-      "gap nights). Defaults to a dry run that shows the exact payload; pass confirm=true to write. " +
+      "gap nights). This tool DOES change prices — but only with explicit confirm=true; it defaults to a dry run " +
+      "that shows the exact payload without writing anything. " +
       "The prior custom rates are snapshotted to the decision log before writing, so every applied decision " +
       "can be undone with revert_decision. Requires WHEELHOUSE_API_KEY.",
     inputSchema: applyDecisionInputSchema,
@@ -146,8 +151,8 @@ server.registerTool(
     title: "Revert an applied pricing decision",
     description:
       "Reverts an applied pricing decision: deletes the custom rates it wrote in Wheelhouse and restores any " +
-      "prior custom rates from the snapshot taken before the write. Pass confirm=true to execute; without it " +
-      "you get a preview. Requires WHEELHOUSE_API_KEY.",
+      "prior custom rates from the snapshot taken before the write. This tool DOES change prices — but only " +
+      "with explicit confirm=true; without it you get a preview. Requires WHEELHOUSE_API_KEY.",
     inputSchema: revertDecisionInputSchema,
   },
   async (args) => {

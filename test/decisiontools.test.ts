@@ -49,6 +49,8 @@ function fakeWheelhouse(
     failPut?: boolean;
     /** Kaada VAIN n:s custom_rates-PUT (1-alkuinen) — osittaisen kirjoitusvirheen simulointi. */
     failPutOnCall?: number;
+    /** Yliaja hintasuositukset (oletus: 50 € kaikille kolmelle aukkoyölle). */
+    priceRecs?: { stay_date: string; price: number; currency: string }[];
   } = {},
 ) {
   const listings = [{ id: 11, channel: "hypothetical", nickname: "Test Cabin", currency: "EUR" }];
@@ -66,7 +68,7 @@ function fakeWheelhouse(
   ];
   // aukot 2026-06-28..30; suositus 50 < lattia 95 (manual 70 + 0 + marginaali 25)
   const priceRecs = {
-    data: [
+    data: opts.priceRecs ?? [
       { stay_date: "2026-06-28", price: 50, currency: "EUR" },
       { stay_date: "2026-06-29", price: 50, currency: "EUR" },
       { stay_date: "2026-06-30", price: 50, currency: "EUR" },
@@ -218,6 +220,21 @@ describe("propose_decisions — WH-tila (fake-client)", () => {
     });
   });
 
+  it("ei ehdotuksia + osalta öistä puuttuu hinta → viesti erottelee hinnalliset (M) kaikista (N)", async () => {
+    // Vain 2/3 aukkoyölle on hintadata, molemmat ≥ lattia 95 → ei ehdotuksia,
+    // mutta viesti EI saa väittää että kaikki 3 yötä olisi verrattu.
+    const { client } = fakeWheelhouse({
+      priceRecs: [
+        { stay_date: "2026-06-28", price: 200, currency: "EUR" },
+        { stay_date: "2026-06-29", price: 200, currency: "EUR" },
+      ],
+    });
+    const out = await runProposeDecisions({}, whEnv(), { now: NOW, client });
+
+    expect(out).toContain("No proposals — all 2 priced gap nights (of 3) are at or above the cost floor");
+    expect(out).toContain("the remaining 1 has no price data and was not compared");
+  });
+
   it("WHEELHOUSE_CHANNEL-yliajo EI vuoda kirjoituskanavaan — päätös saa listingin oman kanavan", async () => {
     const { client, calls } = fakeWheelhouse();
     // .env.example-tyylinen yliajo joka eroaa listingin omasta kanavasta (hypothetical)
@@ -304,6 +321,25 @@ describe("apply_decision — dry run ja turvasäännöt", () => {
     // demo-huomautus: oikea sovellus vaatii avaimen + uuden proposen
     expect(out).toContain("requires WHEELHOUSE_API_KEY");
     expect(readDecisions(e)[0].status).toBe("proposed"); // mitään ei kirjoitettu
+  });
+
+  it("dry run osittaisen kirjoituksen retry-tilassa listaa jo kirjoitetut ranget eikä väitä ettei mitään ole kirjoitettu", async () => {
+    const e = whEnv();
+    // kaksi EI-peräkkäistä yötä → kaksi rangea; 1. range ehti kirjautua aiemmalla yrityksellä
+    seedDecision(e, {
+      dates: ["2026-06-28", "2026-06-30"],
+      applied_ranges: [{ start_date: "2026-06-28", end_date: "2026-06-29" }],
+    });
+    const out = await runApplyDecision({ decision_id: "d1" }, e); // ei clientiä → ei verkkoa
+
+    expect(out).not.toContain("Nothing has been written");
+    expect(out).toContain("## Dry run — decision d1 (this preview writes nothing)");
+    expect(out).toContain(
+      "a previous apply attempt already wrote 1 of 2 ranges: 2026-06-28 → 2026-06-29",
+    );
+    expect(out).toContain('revert_decision {"decision_id": "d1", "confirm": true}');
+    expect(out).toContain('To execute: apply_decision {"decision_id": "d1", "confirm": true}');
+    expect(readDecisions(e)[0].status).toBe("proposed"); // esikatselu ei muuta mitään
   });
 
   it("ilman avainta → selkeä virhe WHEELHOUSE_API_KEYstä", async () => {

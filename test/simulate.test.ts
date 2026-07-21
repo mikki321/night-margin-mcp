@@ -256,6 +256,10 @@ describe("formatComparison", () => {
 
     expect(text).toContain("## Strategy comparison 2026-07-01 → 2026-07-11");
     expect(text).toContain("| Scenario | Gross | Net | Net/night | Occupancy | Turnovers | Leak |");
+    // A:n 100 % -täyttöoletus näkyy tulosteessa (tuomarisimulaation löydös 1)
+    expect(text).toContain(
+      "_Strategy A assumes every gap night sells at the discounted price — an upper bound._",
+    );
     expect(text).toContain("**A** raises occupancy by +10.0 pp but net/night changes by -€2");
     expect(text).toContain("**B** lowers occupancy");
     // fixtuurissa A: brutto +120 €, netto −40 € → ydinviesti mukana

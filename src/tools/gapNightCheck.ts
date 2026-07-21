@@ -140,10 +140,21 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
 
   let verdictLine: string;
   if (price) {
+    // Kaksi eri lukua (tuomarisimulaation löydös 2): floor-ylitys sisältää
+    // MIN_MARGINin, todellinen netto = hinta − (vaihto + matka) ILMAN sitä.
     const diff = price.value - floor;
-    const verdict = diff >= 0 ? "FILL" : "SKIP";
-    const diffTxt = diff >= 0 ? `+${eur(diff)}` : eur(diff);
-    verdictLine = `${floorPart} · ${price.label} ${eur(price.value)} → ${verdict} — filling yields ${diffTxt}.`;
+    const net = price.value - (est.turnover + est.travel);
+    const netTxt = net >= 0 ? `+${eur(net)}` : eur(net);
+    if (diff >= 0) {
+      const barely = diff < 5 ? " (barely — consider your risk appetite)" : "";
+      verdictLine =
+        `${floorPart} · ${price.label} ${eur(price.value)} → FILL — clears the floor by ${eur(diff)}${barely}; ` +
+        `net after turnover costs ${netTxt}.`;
+    } else {
+      verdictLine =
+        `${floorPart} · ${price.label} ${eur(price.value)} → SKIP — ${eur(-diff)} below floor; ` +
+        `filling would net ${netTxt} after costs.`;
+    }
   } else if (data.whKeyPresent) {
     verdictLine = `${floorPart}. The WH price recommendation will be wired in once the WH reservation adapter is ready — provide candidate_price to get a FILL/SKIP verdict.`;
   } else {

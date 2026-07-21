@@ -133,6 +133,40 @@ describe("analyzePortfolio", () => {
       /has no cost row/,
     );
   });
+
+  it("ilman allPropertyIds-parametria käytös ja tuloskentät ovat ennallaan", () => {
+    expect(a.no_booking_properties).toBeUndefined();
+    expect("no_booking_properties" in a).toBe(false);
+  });
+
+  it("allPropertyIds: nollavarauskohde mukaan nimittäjään (booked 0, gap = jakson yöt, net 0)", () => {
+    const b = analyzePortfolio(reservations, costs, from, to, ["p1", "p2", "p3-empty"]);
+    const empty = b.properties.find((p) => p.property_id === "p3-empty")!;
+    expect(empty).toEqual({
+      property_id: "p3-empty",
+      booked_nights: 0,
+      gap_nights: 10,
+      available_nights: 10,
+      gross: 0,
+      costs: 0,
+      net: 0,
+      net_per_available_night: 0,
+    });
+    // nimittäjä kasvaa 20 → 30, varatut yöt eivät → käyttöaste laskee rehellisesti
+    expect(b.totals.available_nights).toBe(30);
+    expect(b.totals.booked_nights).toBe(11);
+    expect(b.totals.occupancy_pct).toBeCloseTo((11 / 30) * 100);
+    expect(b.totals.net).toBe(a.totals.net); // netto ei muutu, vain jakauma
+    expect(b.totals.net_per_available_night).toBeCloseTo(1050 / 30);
+    expect(b.no_booking_properties).toBe(1);
+  });
+
+  it("allPropertyIds: listan varaukselliset kohteet eivät duplikoidu eikä luku kasva", () => {
+    const b = analyzePortfolio(reservations, costs, from, to, ["p1", "p2"]);
+    expect(b.properties).toHaveLength(2);
+    expect(b.totals.available_nights).toBe(20);
+    expect(b.no_booking_properties).toBe(0);
+  });
 });
 
 describe("manualSource", () => {

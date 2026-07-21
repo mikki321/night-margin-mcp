@@ -72,7 +72,7 @@ curl -o costs.csv "https://raw.githubusercontent.com/mikki321/night-margin-mcp/m
 claude mcp add margin -e COST_SOURCE=csv -e CSV_PATH="$PWD/costs.csv" -- npx -y night-margin-mcp
 ```
 
-Cost rows are matched to bookings primarily by `reservation_id`, and secondarily by the composite key `property_id|checkin|checkout`. The tool response reports the attribution quality (e.g. "Cost attribution: 41 by id, 6 by composite key, 3 by average"). If a row is missing and no `AVG_TURNOVER_COST` fallback is set, you get a clear error listing the affected bookings.
+Cost rows are matched to bookings primarily by `reservation_id`, and secondarily by the composite key `property_id|checkin|checkout`. The tool response reports the attribution quality — e.g. "Cost attribution: 289/289 bookings matched by reservation_id", or with mixed sources "Cost attribution: 41 by reservation_id, 6 by composite key, 3 by average fallback (50 total)". If a row is missing and no `AVG_TURNOVER_COST` fallback is set, you get a clear error listing the affected bookings.
 
 ## Wheelhouse API key
 
