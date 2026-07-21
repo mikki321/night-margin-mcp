@@ -8,6 +8,8 @@ export interface Reservation {
   checkout: string;
   nights: number;
   gross_revenue: number;
+  /** Kanavan vahvistuskoodi (esim. WH-varauksista) — matchCosts-kaskadin haara 2. */
+  confirmation_code?: string;
 }
 
 /** Yhden varauksen vaihtokustannukset. */

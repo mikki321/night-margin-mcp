@@ -24,6 +24,9 @@ export function reservationSourceFromEnv(
   if (env.WHEELHOUSE_API_KEY?.trim()) {
     return wheelhouseReservations(
       new WheelhouseClient({ apiKey: env.WHEELHOUSE_API_KEY.trim(), baseUrl: env.WHEELHOUSE_API_URL }),
+      // Kanava env:stä (oletus "hostaway") — listingin channel-avaimet eivät
+      // välttämättä kelpaa reservations-endpointille (ks. adapter.ts).
+      { channel: env.WHEELHOUSE_CHANNEL },
     );
   }
   return mockReservationSource();

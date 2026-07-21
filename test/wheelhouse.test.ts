@@ -102,9 +102,10 @@ describe("WheelhouseClient", () => {
 });
 
 // ---------------------------------------------------------------------------
-// WH-adapterin turvakuori (Päätösloki P2). TYÖSÄÄNTÖ 1: näissä testeissä ei
-// esiinny yhtään Wheelhouse-VARAUSkentän nimeä — raakadata on läpinäkymätön
-// sentinel ja parseri injektoidaan.
+// WH-adapterin putkitestit (Päätösloki P2). Putkitesteissä raakadata on
+// läpinäkymätön sentinel ja parseri injektoidaan; parserin omat testit ajavat
+// synteettistä fixtuuria joka noudattaa OIKEAA curl #2 -skeemaa (työsääntö 1
+// täyttyy — ks. src/wheelhouse/adapter.ts:n alkukommentti).
 // ---------------------------------------------------------------------------
 
 /** Synteettinen varaus OMAN contractimme kentillä (ei WH-kenttiä). */
@@ -122,12 +123,11 @@ const resv = (
   gross_revenue: 100,
 });
 
-describe("parseReservations (stub)", () => {
-  it("heittää: kertoo v0.2.1:stä ja ohjaa demo-dataan tai CSV:hen", () => {
-    expect(() => parseReservations({})).toThrow(/v0\.2\.1/);
-    expect(() => parseReservations({})).toThrow(/demo data/i);
-    expect(() => parseReservations({})).toThrow(/WHEELHOUSE_API_KEY/);
-    expect(() => parseReservations({})).toThrow(/README/);
+describe("parseReservations: ei-array-syöte", () => {
+  it("objekti/merkkijono/null → selkeä virhe saadulla tyypillä", () => {
+    expect(() => parseReservations({})).toThrow(/expected a JSON array.*got object/);
+    expect(() => parseReservations("RAW")).toThrow(/expected a JSON array.*got string/);
+    expect(() => parseReservations(null)).toThrow(/expected a JSON array.*got null/);
   });
 });
 
@@ -179,19 +179,39 @@ describe("wheelhouseReservations-putki", () => {
   it("hakee listaukset, suodattaa inaktiiviset, kutsuu raw-haut sarjassa ja syöttää raa'an datan parserille sellaisenaan", async () => {
     const { client, urls, max } = pipelineClient();
     const rawSeen: unknown[] = [];
-    const src = wheelhouseReservations(client, (raw) => {
-      rawSeen.push(raw);
-      return [];
+    const src = wheelhouseReservations(client, {
+      parse: (raw) => {
+        rawSeen.push(raw);
+        return [];
+      },
     });
 
     await src.getReservations("2026-06-01", "2026-07-01");
 
     const resUrls = urls.filter((u) => u.includes("/reservations"));
     expect(resUrls).toHaveLength(2); // inaktiivinen id=2 suodattui
-    expect(resUrls[0]).toContain("/listings/1/reservations?channel=airbnb");
-    expect(resUrls[1]).toContain("/listings/3/reservations?channel=airbnb");
+    // kanava oletuksena "hostaway" — EI listingin channel-kentästä
+    expect(resUrls[0]).toContain("/listings/1/reservations?channel=hostaway");
+    expect(resUrls[1]).toContain("/listings/3/reservations?channel=hostaway");
     expect(rawSeen).toEqual(["RAW_PAYLOAD_1", "RAW_PAYLOAD_3"]); // pass-through, ei tulkintaa
     expect(max()).toBe(1); // sarjassa, ei fan-outia
+  });
+
+  it("kanavan voi yliajaa (env WHEELHOUSE_CHANNEL → opts.channel)", async () => {
+    const { client, urls } = pipelineClient();
+    const src = wheelhouseReservations(client, { channel: "examplepms", parse: () => [] });
+    await src.getReservations("2026-06-01", "2026-07-01");
+    const resUrls = urls.filter((u) => u.includes("/reservations"));
+    expect(resUrls[0]).toContain("channel=examplepms");
+  });
+
+  it("asettaa property_id:n listingin nimestä (nickname → title → id)", async () => {
+    const { client } = pipelineClient();
+    const src = wheelhouseReservations(client, {
+      parse: () => [resv("r1", "", "2026-06-05", "2026-06-08")],
+    });
+    const got = await src.getReservations("2026-06-01", "2026-07-01");
+    expect(got.map((r) => r.property_id)).toEqual(["Alpha", "Gamma"]);
   });
 
   it("leikkaa jaksolle [from, to): ikkunaa leikkaavat mukaan, rajatapaukset ulos", async () => {
@@ -208,30 +228,32 @@ describe("wheelhouseReservations-putki", () => {
       ],
     ];
     let call = 0;
-    const src = wheelhouseReservations(client, () => perListing[call++]);
+    const src = wheelhouseReservations(client, { parse: () => perListing[call++] });
 
     const got = await src.getReservations("2026-06-01", "2026-07-01");
     expect(got.map((r) => r.reservation_id)).toEqual(["in-full", "in-overlap-end"]);
   });
 
-  it("oletusparserilla stub-virhe nousee kutsujalle asti — EI hiljaista mock-fallbackia", async () => {
+  it("oletusparserilla validointivirhe nousee kutsujalle asti — EI hiljaista mock-fallbackia", async () => {
     const { client } = pipelineClient();
-    const src = wheelhouseReservations(client);
-    await expect(src.getReservations("2026-06-01", "2026-07-01")).rejects.toThrow(/v0\.2\.1/);
+    const src = wheelhouseReservations(client); // sentinel-raaka on merkkijono, ei array
+    await expect(src.getReservations("2026-06-01", "2026-07-01")).rejects.toThrow(
+      /expected a JSON array/,
+    );
   });
 
-  it("label kertoo rehellisesti tilanteen", () => {
+  it("label kertoo datalähteen rehellisesti", () => {
     const { client } = pipelineClient();
     const src = wheelhouseReservations(client);
-    expect(src.label).toContain("Wheelhouse");
-    expect(src.label).toContain("v0.2.1");
+    expect(src.label).toContain("Wheelhouse RM API (live)");
+    expect(src.label).not.toContain("v0.2.1");
   });
 });
 
 // ---------------------------------------------------------------------------
-// Fixture-portitetut testit: aktivoituvat automaattisesti kun Mikin redaktoima
-// curl #2 -vastaus ilmestyy (ks. test/fixtures/README.md). Siihen asti skip.
-// Asserit käyttävät VAIN oman Reservation-contractimme kenttiä.
+// Fixture-testit: synteettinen fixtuuri noudattaa täsmälleen oikean curl #2
+// -vastauksen skeemaa (ei oikeita arvoja). Asserit käyttävät VAIN oman
+// Reservation-contractimme kenttiä + fixtuurin synteettisiä arvoja.
 // ---------------------------------------------------------------------------
 
 const FIXTURE_PATH = join(
@@ -241,17 +263,28 @@ const FIXTURE_PATH = join(
 );
 const fixtureExists = existsSync(FIXTURE_PATH);
 
-describe.skipIf(!fixtureExists)("parseReservations oikealla (redaktoidulla) fixtuurilla", () => {
-  it("parsii fixtuurin Reservation-contractin mukaisiksi riveiksi", () => {
-    const raw: unknown = JSON.parse(readFileSync(FIXTURE_PATH, "utf8"));
-    const reservations = parseReservations(raw);
+/** Fixtuuri on rivitaulukko; kopio per testi ettei rikkominen vuoda muihin. */
+function loadFixture(): Record<string, unknown>[] {
+  return JSON.parse(readFileSync(FIXTURE_PATH, "utf8")) as Record<string, unknown>[];
+}
 
-    expect(Array.isArray(reservations)).toBe(true);
-    expect(reservations.length).toBeGreaterThan(0);
-    for (const r of reservations) {
+describe.skipIf(!fixtureExists)("parseReservations fixtuurilla (curl #2 -skeema)", () => {
+  it("parsii täsmälleen 3 Accepted-varausta ja pudottaa ei-Accepted-rivin hiljaa", () => {
+    const reservations = parseReservations(loadFixture());
+    expect(reservations.map((r) => r.reservation_id)).toEqual([
+      "10000001",
+      "10000002",
+      "10000004",
+    ]);
+    // SyntheticNotAccepted (10000003) ei ole mukana
+    expect(reservations.some((r) => r.reservation_id === "10000003")).toBe(false);
+  });
+
+  it("täyttää Reservation-contractin kentät jokaiselle riville", () => {
+    for (const r of parseReservations(loadFixture())) {
       expect(typeof r.reservation_id).toBe("string");
       expect(r.reservation_id.length).toBeGreaterThan(0);
-      expect(typeof r.property_id).toBe("string");
+      expect(typeof r.property_id).toBe("string"); // putki täyttää nimen; parserilta ""
       expect(r.checkin).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(r.checkout).toMatch(/^\d{4}-\d{2}-\d{2}$/);
       expect(r.checkin < r.checkout).toBe(true);
@@ -259,5 +292,96 @@ describe.skipIf(!fixtureExists)("parseReservations oikealla (redaktoidulla) fixt
       expect(r.nights).toBeGreaterThan(0);
       expect(Number.isFinite(r.gross_revenue)).toBe(true);
     }
+  });
+
+  it("checkin=start_date, checkout=end_date ja nights=päiväero", () => {
+    const byId = new Map(parseReservations(loadFixture()).map((r) => [r.reservation_id, r]));
+    expect(byId.get("10000001")).toMatchObject({
+      checkin: "2026-06-03",
+      checkout: "2026-06-06",
+      nights: 3,
+    });
+    expect(byId.get("10000002")!.nights).toBe(1);
+    // kuunvaihteen yli: 2026-06-28 → 2026-07-03
+    expect(byId.get("10000004")!.nights).toBe(5);
+  });
+
+  it("gross_revenue = total_price − taxes − security_deposit (10000004 → 700)", () => {
+    const byId = new Map(parseReservations(loadFixture()).map((r) => [r.reservation_id, r]));
+    expect(byId.get("10000004")!.gross_revenue).toBe(700); // 780 − 30 − 50
+    expect(byId.get("10000001")!.gross_revenue).toBe(330); // 360 − 30 − 0
+    expect(byId.get("10000002")!.gross_revenue).toBe(95); // 95 − 0 − 0
+  });
+
+  it("confirmation_code: null → kenttä pois; merkkijono → mukaan", () => {
+    const byId = new Map(parseReservations(loadFixture()).map((r) => [r.reservation_id, r]));
+    expect(byId.get("10000001")!.confirmation_code).toBe("SYNTH0001A");
+    expect(byId.get("10000002")!.confirmation_code).toBeUndefined();
+    expect("confirmation_code" in byId.get("10000002")!).toBe(false);
+  });
+
+  it("viallinen rivi → virhe kentän nimellä, tyypillä ja indeksillä — EI arvolla", () => {
+    const missingId = loadFixture();
+    delete missingId[0].id;
+    expect(() => parseReservations(missingId)).toThrow(
+      /index 0.*field "id" must be a non-empty string, got undefined/,
+    );
+
+    const badPrice = loadFixture();
+    badPrice[1].total_price = "SYNTH_LEAK_CANARY";
+    try {
+      parseReservations(badPrice);
+      expect.unreachable("should have thrown");
+    } catch (e) {
+      const msg = (e as Error).message;
+      expect(msg).toMatch(/index 1.*field "total_price" must be a finite number, got string/);
+      expect(msg).not.toContain("SYNTH_LEAK_CANARY"); // arvo ei saa vuotaa virheeseen
+    }
+
+    const badDate = loadFixture();
+    badDate[0].start_date = "03.06.2026";
+    expect(() => parseReservations(badDate)).toThrow(
+      /index 0.*field "start_date" must be a YYYY-MM-DD date string/,
+    );
+
+    const reversedDates = loadFixture();
+    reversedDates[0].end_date = "2026-06-01"; // ennen start_datea 2026-06-03
+    expect(() => parseReservations(reversedDates)).toThrow(
+      /index 0.*"end_date" must be a date after "start_date"/,
+    );
+
+    const badCode = loadFixture();
+    badCode[0].confirmation_code = 12345;
+    expect(() => parseReservations(badCode)).toThrow(
+      /index 0.*field "confirmation_code" must be a string or null, got number/,
+    );
+
+    const badRow = loadFixture() as unknown[];
+    badRow[2] = "not-an-object";
+    expect(() => parseReservations(badRow)).toThrow(/index 2.*expected an object, got string/);
+  });
+
+  it("viallinen EI-Accepted-rivi pudotetaan silti hiljaa (status tarkistetaan ensin)", () => {
+    const fixture = loadFixture();
+    const dropped = fixture.find((row) => row.status !== "Accepted")!;
+    delete dropped.total_price; // rikki, mutta rivi ei koskaan päädy validointiin
+    expect(parseReservations(fixture)).toHaveLength(3);
+  });
+
+  it("putki päästä päähän: property_id listingin nimestä, channel=hostaway", async () => {
+    const fixtureBody = loadFixture();
+    const urls: string[] = [];
+    const client = clientWith(async (url) => {
+      urls.push(url);
+      if (url.includes("/reservations")) return ok(fixtureBody);
+      return ok([{ id: 570099, channel: "examplepms", nickname: "Aurora Cabin" }]);
+    });
+    const src = wheelhouseReservations(client);
+
+    const got = await src.getReservations("2026-06-01", "2026-07-01");
+
+    expect(urls.some((u) => u.includes("channel=hostaway"))).toBe(true);
+    expect(got).toHaveLength(3); // 10000004 leikkaa ikkunaa → mukana
+    expect(new Set(got.map((r) => r.property_id))).toEqual(new Set(["Aurora Cabin"]));
   });
 });

@@ -33,9 +33,9 @@ describe("matchCosts — kaskadin haarat", () => {
     expect(report).toEqual({ by_id: 1, by_code: 0, by_composite: 0, by_fallback: 0 });
   });
 
-  it("(2) confirmation_code kun id ei osu (haara valmiina askeleen 3 WH-dataan)", () => {
+  it("(2) confirmation_code kun id ei osu (WH-parseri tuottaa kentän)", () => {
     const r = res("wh-123", { property_id: "eri-kohde" });
-    (r as unknown as Record<string, unknown>).confirmation_code = "HMABCDEF";
+    r.confirmation_code = "HMABCDEF";
     const { costs, report } = matchCosts([r], [row("ch-999", { confirmation_code: "HMABCDEF" })]);
     // kustannus avaimoidaan ja normalisoidaan varauksen id:lle, ei rivin
     expect(costs.get("wh-123")!.reservation_id).toBe("wh-123");
@@ -134,7 +134,7 @@ describe("matchCosts — kaskadin haarat", () => {
 
   it("count-raportti summautuu sekakatraalla oikein", () => {
     const rWithCode = res("wh-b", { property_id: "kohde-b", checkin: "2026-06-05", checkout: "2026-06-08" });
-    (rWithCode as unknown as Record<string, unknown>).confirmation_code = "CODE-B";
+    rWithCode.confirmation_code = "CODE-B";
     const reservations = [
       res("r1"),
       rWithCode,

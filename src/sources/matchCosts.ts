@@ -21,13 +21,11 @@ const compositeKey = (propertyId: string, checkin: string, checkout: string): st
   `${propertyId.toLowerCase()}|${checkin}|${checkout}`;
 
 /**
- * Varauksen mahdollinen vahvistuskoodi. Reservation-tyypissä ei ole kenttää
- * (vielä) — haara aktivoituu askeleessa 3, kun WH-adapterin parseri alkaa
- * tuottaa confirmation_coden oikeasta API-vastauksesta.
+ * Varauksen mahdollinen vahvistuskoodi — WH-adapterin parseri tuottaa kentän
+ * oikeasta API-vastauksesta (askel 3); tyhjä merkkijono ei kelpaa avaimeksi.
  */
 function confirmationCode(r: Reservation): string | undefined {
-  const code = (r as unknown as Record<string, unknown>).confirmation_code;
-  return typeof code === "string" && code !== "" ? code : undefined;
+  return r.confirmation_code ? r.confirmation_code : undefined;
 }
 
 /**

@@ -40,6 +40,7 @@ claude mcp add margin -e WHEELHOUSE_API_KEY=xxx -e COST_SOURCE=csv -e CSV_PATH=/
 | Variable | Default | Description |
 |---|---|---|
 | `WHEELHOUSE_API_KEY` | – | Your own Wheelhouse integration key. When set, bookings are fetched from the Wheelhouse RM API; without it, synthetic demo data is used. |
+| `WHEELHOUSE_CHANNEL` | `hostaway` | `channel` parameter for Wheelhouse reservation/price calls. A listing's own channel ids may not be values the API accepts, so if requests return 404, set this to your PMS channel name. |
 | `COST_SOURCE` | `manual` | Source of turnover costs: `manual` \| `csv` \| `cleanhub`. |
 | `AVG_TURNOVER_COST` | `70` | Manual mode: € per turnover (cleaning). Also serves as the fallback in CSV mode when a booking has no cost row. |
 | `COST_TIERS` | – | Optional tiering, e.g. `1br:55,2br:70,3br:95` — matched against the property's `property_id` by substring; everything else gets `AVG_TURNOVER_COST`. |
