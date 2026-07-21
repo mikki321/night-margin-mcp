@@ -30,11 +30,35 @@ export interface WhPriceRec {
   min_stay?: number;
 }
 
-export type FetchLike = (url: string, init?: { headers?: Record<string, string> }) => Promise<{
+export type FetchLike = (
+  url: string,
+  init?: { method?: string; headers?: Record<string, string>; body?: string },
+) => Promise<{
   ok: boolean;
   status: number;
   json(): Promise<unknown>;
 }>;
+
+/**
+ * Custom rate -rivi GET-vastauksessa / PUT-bodyssä (verifioitu oikealla
+ * tilillä 22.7. — ks. wh-write-api-spec). Vain dokumentoidut kentät tyypitetty;
+ * loput kulkevat läpi tulkitsematta (snapshot/restore käyttää raakaobjektia).
+ */
+export type WhCustomRate = Record<string, unknown> & {
+  start_date?: string;
+  end_date?: string;
+};
+
+/** Fixed-tyypin custom rate asettaa hinnan viikonpäivittäin — kaikki 7 samaan hintaan. */
+export const CUSTOM_RATE_WEEKDAYS = [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+] as const;
 
 type SleepLike = (ms: number) => Promise<void>;
 
@@ -66,20 +90,37 @@ export class WheelhouseClient {
     this.sleep = opts.sleepImpl ?? realSleep;
   }
 
-  /** GET + auth + 429-backoff + prosessikohtainen cache. Kutsutaan sarjassa, ei fan-outia. */
-  private async request(path: string): Promise<unknown> {
+  /**
+   * HTTP-kutsu + auth + throttle + 429-backoff. Vain GET-vastaukset cachetetaan;
+   * kirjoituksia (PUT/DELETE) EI koskaan cacheteta. Kutsutaan sarjassa, ei fan-outia.
+   */
+  private async request(
+    path: string,
+    opts: { method?: "GET" | "PUT" | "DELETE"; body?: unknown } = {},
+  ): Promise<unknown> {
+    const method = opts.method ?? "GET";
     const url = `${this.baseUrl}${path}`;
-    const cached = this.cache.get(url);
-    if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.body;
+    if (method === "GET") {
+      const cached = this.cache.get(url);
+      if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.body;
+    }
 
     for (let attempt = 0; ; attempt++) {
       const throttle = this.lastRequestAt + MIN_INTERVAL_MS - Date.now();
       if (throttle > 0) await this.sleep(throttle);
       this.lastRequestAt = Date.now();
 
+      const headers: Record<string, string> = { "X-Integration-Api-Key": this.apiKey };
+      const init: { method?: string; headers: Record<string, string>; body?: string } = { headers };
+      if (method !== "GET") init.method = method;
+      if (opts.body !== undefined) {
+        headers["Content-Type"] = "application/json";
+        init.body = JSON.stringify(opts.body);
+      }
+
       let res: Awaited<ReturnType<FetchLike>>;
       try {
-        res = await this.fetchImpl(url, { headers: { "X-Integration-Api-Key": this.apiKey } });
+        res = await this.fetchImpl(url, init);
       } catch (e) {
         throw new Error(`Wheelhouse connection failed (${url}): ${(e as Error).message}`);
       }
@@ -101,9 +142,18 @@ export class WheelhouseClient {
         throw new WheelhouseHttpError(`Wheelhouse returned HTTP ${res.status} (${url})`, res.status);
       }
 
-      const body = await res.json();
-      this.cache.set(url, { at: Date.now(), body });
+      // 204 No Content (esim. DELETE custom_rates) — ei bodya parsittavaksi.
+      const body = res.status === 204 ? undefined : await res.json();
+      if (method === "GET") this.cache.set(url, { at: Date.now(), body });
       return body;
+    }
+  }
+
+  /** Poistaa listingin custom_rates-GETit cachesta — kutsutaan jokaisen kirjoituksen jälkeen. */
+  private invalidateCustomRatesCache(listingId: string | number): void {
+    const prefix = `${this.baseUrl}/listings/${listingId}/custom_rates`;
+    for (const key of [...this.cache.keys()]) {
+      if (key.startsWith(prefix)) this.cache.delete(key);
     }
   }
 
@@ -140,5 +190,82 @@ export class WheelhouseClient {
       throw new Error("Wheelhouse price_recommendations response is missing the data array");
     }
     return data as WhPriceRec[];
+  }
+
+  // -------------------------------------------------------------------------
+  // Custom rates — muodot verifioitu oikealla tilillä 22.7. (wh-write-api-spec):
+  // GET → array, PUT body = {start_date, end_date, rate_type:"fixed", currency,
+  // monday..sunday}, DELETE ?start_date&end_date → 204. end_date on
+  // eksklusiivinen tyyliin "yksi yö = start+1".
+  // -------------------------------------------------------------------------
+
+  /** Listingin nykyiset custom ratet (tyhjä array jos ei yhtään). */
+  async getCustomRates(listingId: string | number, channel: string): Promise<WhCustomRate[]> {
+    const body = await this.request(
+      `/listings/${listingId}/custom_rates?channel=${encodeURIComponent(channel)}`,
+    );
+    if (!Array.isArray(body)) {
+      throw new Error("Wheelhouse custom_rates response was not in the expected shape (array)");
+    }
+    return body as WhCustomRate[];
+  }
+
+  /**
+   * Kirjoittaa fixed-hinnan välille [start_date, end_date): kaikki 7 viikonpäivää
+   * samaan hintaan (vain rangen päivien viikonpäivillä on merkitystä). Currency
+   * annetaan listingistä; ilman sitä "EUR". Kirjoitusta EI cacheteta ja se
+   * invalidoi listingin custom_rates-cachen.
+   */
+  async putCustomRate(
+    listingId: string | number,
+    channel: string,
+    opts: { start_date: string; end_date: string; price: number; currency?: string },
+  ): Promise<unknown> {
+    const body: Record<string, unknown> = {
+      start_date: opts.start_date,
+      end_date: opts.end_date,
+      rate_type: "fixed",
+      currency: opts.currency?.trim() || "EUR",
+    };
+    for (const day of CUSTOM_RATE_WEEKDAYS) body[day] = opts.price;
+    return this.putCustomRateBody(listingId, channel, body);
+  }
+
+  /**
+   * Raaka PUT valmiilla bodylla — revert käyttää tätä snapshotin aiempien
+   * custom ratejen palautukseen täsmälleen sellaisinaan.
+   */
+  async putCustomRateBody(
+    listingId: string | number,
+    channel: string,
+    body: Record<string, unknown>,
+  ): Promise<unknown> {
+    try {
+      return await this.request(
+        `/listings/${listingId}/custom_rates?channel=${encodeURIComponent(channel)}`,
+        { method: "PUT", body },
+      );
+    } finally {
+      // Myös virhetilanteessa: palvelin on voinut ehtiä kirjoittaa.
+      this.invalidateCustomRatesCache(listingId);
+    }
+  }
+
+  /** Poistaa custom ratet väliltä [start_date, end_date) — revert-mekanismi (204). */
+  async deleteCustomRates(
+    listingId: string | number,
+    channel: string,
+    start_date: string,
+    end_date: string,
+  ): Promise<void> {
+    try {
+      await this.request(
+        `/listings/${listingId}/custom_rates?channel=${encodeURIComponent(channel)}` +
+          `&start_date=${encodeURIComponent(start_date)}&end_date=${encodeURIComponent(end_date)}`,
+        { method: "DELETE" },
+      );
+    } finally {
+      this.invalidateCustomRatesCache(listingId);
+    }
   }
 }

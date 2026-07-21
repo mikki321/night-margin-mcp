@@ -190,9 +190,9 @@ describe("wheelhouseReservations-putki", () => {
 
     const resUrls = urls.filter((u) => u.includes("/reservations"));
     expect(resUrls).toHaveLength(2); // inaktiivinen id=2 suodattui
-    // kanava oletuksena "hostaway" — EI listingin channel-kentästä
-    expect(resUrls[0]).toContain("/listings/1/reservations?channel=hostaway");
-    expect(resUrls[1]).toContain("/listings/3/reservations?channel=hostaway");
+    // kanava = LISTINGIN OMA channel-kenttä per listing (22.7. spec)
+    expect(resUrls[0]).toContain("/listings/1/reservations?channel=airbnb");
+    expect(resUrls[1]).toContain("/listings/3/reservations?channel=airbnb");
     expect(rawSeen).toEqual(["RAW_PAYLOAD_1", "RAW_PAYLOAD_3"]); // pass-through, ei tulkintaa
     expect(max()).toBe(1); // sarjassa, ei fan-outia
   });
@@ -368,7 +368,7 @@ describe.skipIf(!fixtureExists)("parseReservations fixtuurilla (curl #2 -skeema)
     expect(parseReservations(fixture)).toHaveLength(3);
   });
 
-  it("putki päästä päähän: property_id listingin nimestä, channel=hostaway", async () => {
+  it("putki päästä päähän: property_id listingin nimestä, channel listingin omasta kentästä", async () => {
     const fixtureBody = loadFixture();
     const urls: string[] = [];
     const client = clientWith(async (url) => {
@@ -380,7 +380,7 @@ describe.skipIf(!fixtureExists)("parseReservations fixtuurilla (curl #2 -skeema)
 
     const got = await src.getReservations("2026-06-01", "2026-07-01");
 
-    expect(urls.some((u) => u.includes("channel=hostaway"))).toBe(true);
+    expect(urls.some((u) => u.includes("channel=examplepms"))).toBe(true);
     expect(got).toHaveLength(3); // 10000004 leikkaa ikkunaa → mukana
     expect(new Set(got.map((r) => r.property_id))).toEqual(new Set(["Aurora Cabin"]));
   });

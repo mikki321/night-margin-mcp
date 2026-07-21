@@ -3,10 +3,14 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { analyzePortfolioInputSchema, runAnalyzePortfolio } from "./tools/analyzePortfolio.js";
+import { applyDecisionInputSchema, runApplyDecision } from "./tools/applyDecision.js";
 import { compareStrategiesInputSchema, runCompareStrategies } from "./tools/compareStrategies.js";
 import { runGapNightCheck } from "./tools/gapNightCheck.js";
+import { proposeDecisionsInputSchema, runProposeDecisions } from "./tools/proposeDecisions.js";
+import { revertDecisionInputSchema, runRevertDecision } from "./tools/revertDecision.js";
+import { runSetTarget, setTargetInputSchema } from "./tools/setTarget.js";
 
-const server = new McpServer({ name: "night-margin-mcp", version: "0.2.0" });
+const server = new McpServer({ name: "night-margin-mcp", version: "0.3.0-dev" });
 
 server.registerTool(
   "analyze_portfolio",
@@ -77,6 +81,101 @@ server.registerTool(
   async (args) => {
     try {
       const text = await runGapNightCheck(args);
+      return { content: [{ type: "text" as const, text }] };
+    } catch (e) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "propose_decisions",
+  {
+    title: "Propose pricing decisions (gap night floors)",
+    description:
+      "Proposes concrete pricing decisions in euros: finds upcoming gap nights where the current price " +
+      "recommendation is below your cost floor (turnover + travel + MIN_MARGIN) and proposes fixing those " +
+      "nights at the floor so they can't sell below cost. Proposals are saved to the local decision log " +
+      "(NM_STATE_DIR, default ~/.night-margin). Window defaults to the next 30 days. " +
+      "Apply a proposal for real with apply_decision.",
+    inputSchema: proposeDecisionsInputSchema,
+  },
+  async (args) => {
+    try {
+      const text = await runProposeDecisions(args);
+      return { content: [{ type: "text" as const, text }] };
+    } catch (e) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "apply_decision",
+  {
+    title: "Apply a pricing decision to Wheelhouse",
+    description:
+      "Applies a proposed pricing decision to Wheelhouse for real (writes fixed custom rates for the decision's " +
+      "gap nights). Defaults to a dry run that shows the exact payload; pass confirm=true to write. " +
+      "The prior custom rates are snapshotted to the decision log before writing, so every applied decision " +
+      "can be undone with revert_decision. Requires WHEELHOUSE_API_KEY.",
+    inputSchema: applyDecisionInputSchema,
+  },
+  async (args) => {
+    try {
+      const text = await runApplyDecision(args);
+      return { content: [{ type: "text" as const, text }] };
+    } catch (e) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "revert_decision",
+  {
+    title: "Revert an applied pricing decision",
+    description:
+      "Reverts an applied pricing decision: deletes the custom rates it wrote in Wheelhouse and restores any " +
+      "prior custom rates from the snapshot taken before the write. Pass confirm=true to execute; without it " +
+      "you get a preview. Requires WHEELHOUSE_API_KEY.",
+    inputSchema: revertDecisionInputSchema,
+  },
+  async (args) => {
+    try {
+      const text = await runRevertDecision(args);
+      return { content: [{ type: "text" as const, text }] };
+    } catch (e) {
+      return {
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+        isError: true,
+      };
+    }
+  },
+);
+
+server.registerTool(
+  "set_target",
+  {
+    title: "Set a monthly gross revenue target",
+    description:
+      "Sets a monthly gross revenue target for a property (saved locally to NM_STATE_DIR, default " +
+      "~/.night-margin). Shows the month's booked gross so far when it can be computed. analyze_portfolio " +
+      "then reports progress toward any targets whose month overlaps the analysis window.",
+    inputSchema: setTargetInputSchema,
+  },
+  async (args) => {
+    try {
+      const text = await runSetTarget(args);
       return { content: [{ type: "text" as const, text }] };
     } catch (e) {
       return {

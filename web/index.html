@@ -83,7 +83,7 @@
   #tip b { display: block; margin-bottom: 3px; }
   #tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
   #tip .row span:last-child { font-variant-numeric: tabular-nums; color: var(--ink); }
-  footer { margin-top: 34px; font-size: 12px; color: var(--muted); }
+  footer a { color: inherit; } footer { margin-top: 34px; font-size: 12px; color: var(--muted); }
   .empty { color: var(--ink-2); font-size: 13.5px; padding: 14px 0; }
 </style>
 </head>
@@ -205,16 +205,25 @@ fetch("data.json").then(r => {
   } else {
     tri.innerHTML = `<table>
       <tr><th></th><th>Booking</th><th>Property</th><th>Check-in</th><th class="num">Nights</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
-      a.negative_reservations.map(r => `<tr>
+      a.negative_reservations.slice(0, 15).map(r => `<tr>
         <td><span class="chip">⚠ leak</span></td>
         <td>${r.reservation_id}</td><td>${r.property_id}</td><td>${r.checkin}</td>
         <td class="num">${r.nights}</td><td class="num">${eur(r.gross)}</td>
         <td class="num">${eur(r.costs)}</td><td class="num neg">${eur(r.net)}</td></tr>`).join("") +
+      (a.negative_reservations.length > 15
+        ? `<tr><td colspan="8" style="color:var(--ink-2)">…and ${a.negative_reservations.length - 15} more net-negative bookings — open the table view or ask the MCP server.</td></tr>`
+        : "") +
       `</table>`;
   }
 
-  document.getElementById("foot").textContent =
-    `Generated ${d.generated_at} · local demo — data.json is generated on your machine and never committed. Regenerate: npm run demo:web`;
+  /* Honest data label: only claim "synthetic" when the generator says so —
+     with WHEELHOUSE_API_KEY set, data.json holds real portfolio data. */
+  const srcLabel = (d.sources && d.sources.reservations) || "";
+  const dataNote = /synthetic/i.test(srcLabel)
+    ? "synthetic demo data — bring your own with the MCP server"
+    : `data source: ${srcLabel || "unknown"} — generated on your machine and never committed`;
+  document.getElementById("foot").innerHTML =
+    `Generated ${d.generated_at} · ${dataNote} · <a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a>`;
 }).catch(err => {
   document.getElementById("meta").textContent = err.message;
 });

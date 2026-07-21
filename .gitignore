@@ -17,3 +17,4 @@ AGENT_COMMS.md
 
 # /web-demon lokaali data — voi sisältää oikeaa dataa
 web/data.json
+.gstack/

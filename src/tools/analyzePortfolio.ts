@@ -5,6 +5,8 @@ import type { PortfolioAnalysis, PropertyStats } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
 import { avgFallbackFromEnv, resolveCosts } from "../sources/resolveCosts.js";
+import { readTargets } from "../state.js";
+import { formatTargetsSection } from "./setTarget.js";
 
 /** Zod-skeema — index.ts rekisteröi tämän sellaisenaan (yksi totuus, testattavissa). */
 export const analyzePortfolioInputSchema = {
@@ -52,6 +54,7 @@ export function formatAnalysis(
   sourceLabel: string,
   dataNote: string,
   isDefaultWindow = false,
+  targetsSection?: string,
 ): string {
   const bottom = a.properties.slice(0, 10);
   const top = [...a.properties].slice(-5).reverse();
@@ -82,6 +85,9 @@ export function formatAnalysis(
 
   parts.push(`### Bottom ${bottom.length} (net/night)\n${propertyTable(bottom)}`);
   parts.push(`### Top ${top.length} (net/night)\n${propertyTable(top)}`);
+
+  // Kuukausitavoitteet (set_target) — vain kun tavoite osuu ikkunaan.
+  if (targetsSection) parts.push(targetsSection);
 
   if (a.negative_reservations.length > 0) {
     const rows = a.negative_reservations
@@ -126,5 +132,14 @@ export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
   const analysis = analyzePortfolio(reservations, costs, from, to);
   const dataNote =
     `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
-  return formatAnalysis(analysis, costSource.label, dataNote, isDefault);
+
+  // Tavoitteet (set_target): lukukelvoton state ei saa kaataa analyysiä.
+  let targetsSection: string | undefined;
+  try {
+    targetsSection = formatTargetsSection(readTargets(process.env), reservations, from, to);
+  } catch {
+    targetsSection = undefined;
+  }
+
+  return formatAnalysis(analysis, costSource.label, dataNote, isDefault, targetsSection);
 }
