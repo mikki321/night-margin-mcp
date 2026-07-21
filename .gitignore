@@ -1,4 +1,11 @@
 node_modules/
 dist/
+
+# salaisuudet — ei koskaan gitiin
 .env
+.env.*
+!.env.example
+secrets/
+
 *.log
+.DS_Store
