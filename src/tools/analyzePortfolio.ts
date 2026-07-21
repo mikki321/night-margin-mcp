@@ -1,7 +1,7 @@
 import { analyzePortfolio } from "../core/calc.js";
 import type { PortfolioAnalysis, PropertyStats } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
-import { generateMockReservations } from "../sources/mockReservations.js";
+import { reservationSourceFromEnv } from "../sources/reservationSource.js";
 
 const eur = (n: number): string => `${Math.round(n).toLocaleString("fi-FI")} €`;
 const eur2 = (n: number): string =>
@@ -68,15 +68,11 @@ export interface AnalyzeArgs {
 }
 
 export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
-  const source = costSourceFromEnv(process.env, args.avg_turnover_cost);
+  const costSource = costSourceFromEnv(process.env, args.avg_turnover_cost);
+  const reservationSource = reservationSourceFromEnv(process.env);
 
-  // Vaihe 2 tuo Wheelhouse-adapterin; siihen asti varaukset ovat synteettisiä.
-  const dataNote = process.env.WHEELHOUSE_API_KEY
-    ? "varaukset: synteettinen demo-data (Wheelhouse-adapteri tulossa — avain havaittu)"
-    : "varaukset: synteettinen demo-data (aseta WHEELHOUSE_API_KEY, kun WH-adapteri on julkaistu)";
-  const reservations = generateMockReservations(args.from, args.to);
-
-  const costs = await source.getCosts(reservations);
+  const reservations = await reservationSource.getReservations(args.from, args.to);
+  const costs = await costSource.getCosts(reservations);
   const analysis = analyzePortfolio(reservations, costs, args.from, args.to);
-  return formatAnalysis(analysis, source.label, dataNote);
+  return formatAnalysis(analysis, costSource.label, `varaukset: ${reservationSource.label}`);
 }
