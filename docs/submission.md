@@ -44,6 +44,8 @@ I run Lapland Host, a property management company with 73 short-term rental list
 
 **Technical Execution.** A TypeScript MCP server (official SDK, stdio) integrating the Wheelhouse RM API — listings and per-listing reservations (the price-recommendations client is already in place and lands in gap_night_check in 0.2.1), with serial requests and backoff for the 60 req/min limit — live-tested against my own 73-listing portfolio. Turnover costs flow through a pluggable adapter (manual / CSV / HTTP API) with a per-booking attribution cascade reported in every response.
 
+**Positioning vs. Wheelhouse's own MCP.** Wheelhouse already ships an MCP server (78 tools — listings, market data, comps). night-margin deliberately does not duplicate it: we add the one layer it cannot have — your turnover costs, net per available night, and a cost-aware decision loop that writes floor prices back with an explicit confirm and an undo. Run both in the same Claude: theirs answers what the market pays, ours answers what you actually keep.
+
 **Creativity.** Revenue management optimizes gross (ADR, RevPAR); this flips the lens with one new metric — net per available night — plus a gap-night floor price (turnover + travel + minimum margin). In progress for 0.3.0: the decision loop (propose → apply → review) that writes price changes back to Wheelhouse, with dry-run, confirm, and revert.
 
 **Category Fit.** Built by a property manager who runs 73 listings in Lapland — for operators like us. Developed against and live-tested on my own portfolio during the hackathon week, solving a problem my team hits every week.
