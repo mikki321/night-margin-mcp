@@ -59,7 +59,7 @@ demo-1br-01-r1,demo-1br-01,2026-06-03,2026-06-10,7,571,56,16,9,2026-06-10,false
 A synthetic sample file (887 rows, covering the full 2026 calendar year of the demo data) ships with the package at `examples/sample-costs.csv`, and can be downloaded directly:
 
 ```
-https://raw.githubusercontent.com/<GITHUB_USER>/night-margin-mcp/main/examples/sample-costs.csv
+https://raw.githubusercontent.com/mikki321/night-margin-mcp/main/examples/sample-costs.csv
 ```
 
 > Note: this link will be updated to the final address once the repo is published on GitHub.
@@ -67,7 +67,7 @@ https://raw.githubusercontent.com/<GITHUB_USER>/night-margin-mcp/main/examples/s
 Usage:
 
 ```bash
-curl -o costs.csv "https://raw.githubusercontent.com/<GITHUB_USER>/night-margin-mcp/main/examples/sample-costs.csv"
+curl -o costs.csv "https://raw.githubusercontent.com/mikki321/night-margin-mcp/main/examples/sample-costs.csv"
 claude mcp add margin -e COST_SOURCE=csv -e CSV_PATH="$PWD/costs.csv" -- npx -y night-margin-mcp
 ```
 
@@ -97,7 +97,7 @@ claude mcp add margin -- node "<repo path>/dist/index.js"
 If the npm package doesn't work for any reason, the same server installs directly from GitHub:
 
 ```bash
-claude mcp add margin -- npx -y github:<GITHUB_USER>/night-margin-mcp
+claude mcp add margin -- npx -y github:mikki321/night-margin-mcp
 ```
 
 ### Exploring the Wheelhouse API with curl
