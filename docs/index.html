@@ -205,11 +205,14 @@ fetch("data.json").then(r => {
   } else {
     tri.innerHTML = `<table>
       <tr><th></th><th>Booking</th><th>Property</th><th>Check-in</th><th class="num">Nights</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
-      a.negative_reservations.map(r => `<tr>
+      a.negative_reservations.slice(0, 15).map(r => `<tr>
         <td><span class="chip">⚠ leak</span></td>
         <td>${r.reservation_id}</td><td>${r.property_id}</td><td>${r.checkin}</td>
         <td class="num">${r.nights}</td><td class="num">${eur(r.gross)}</td>
         <td class="num">${eur(r.costs)}</td><td class="num neg">${eur(r.net)}</td></tr>`).join("") +
+      (a.negative_reservations.length > 15
+        ? `<tr><td colspan="8" style="color:var(--ink-2)">…and ${a.negative_reservations.length - 15} more net-negative bookings — open the table view or ask the MCP server.</td></tr>`
+        : "") +
       `</table>`;
   }
 
