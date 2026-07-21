@@ -121,20 +121,20 @@ describe("findBooking", () => {
 describe("gapNightReport", () => {
   it("SKIP kun ehdokashinta alle lattian (planin esimerkki)", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 96 }));
-    expect(out).toContain("Lattia 118 € (vaihto 70 + matka 23 + kate 25)");
-    expect(out).toContain("ehdokashinta 96 €");
-    expect(out).toContain("→ SKIP — täyttö tuottaa");
-    expect(out).toContain("22 €"); // 96 − 118 = −22
+    expect(out).toContain("Floor €118 (turnover 70 + travel 23 + margin 25)");
+    expect(out).toContain("candidate price €96");
+    expect(out).toContain("→ SKIP — filling yields");
+    expect(out).toContain("-€22"); // 96 − 118 = −22
   });
 
   it("FILL kun ehdokashinta yli lattian", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 150 }));
-    expect(out).toContain("→ FILL — täyttö tuottaa +32 €");
+    expect(out).toContain("→ FILL — filling yields +€32");
   });
 
   it("FILL kun ehdokashinta täsmälleen lattialla", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 118 }));
-    expect(out).toContain("→ FILL — täyttö tuottaa +0 €");
+    expect(out).toContain("→ FILL — filling yields +€0");
   });
 
   it("recommendedPrice toimii WH-suosituksena kun candidatea ei ole (askel 3 -kytkentä)", () => {
@@ -143,8 +143,8 @@ describe("gapNightReport", () => {
       DATE,
       baseData({ recommendedPrice: 130, whKeyPresent: true }),
     );
-    expect(out).toContain("WH-suositus 130 €");
-    expect(out).toContain("→ FILL — täyttö tuottaa +12 €");
+    expect(out).toContain("WH recommendation €130");
+    expect(out).toContain("→ FILL — filling yields +€12");
   });
 
   it("candidate_price voittaa WH-suosituksen", () => {
@@ -153,7 +153,7 @@ describe("gapNightReport", () => {
       DATE,
       baseData({ candidatePrice: 96, recommendedPrice: 130 }),
     );
-    expect(out).toContain("ehdokashinta 96 €");
+    expect(out).toContain("candidate price €96");
     expect(out).toContain("→ SKIP");
   });
 
@@ -163,7 +163,7 @@ describe("gapNightReport", () => {
       candidatePrice: 96,
     });
     const out = gapNightReport("p1", DATE, data);
-    expect(out).toContain("Ei aukkoyö — varaus r2 (2026-08-14 – 2026-08-17) kattaa yön 2026-08-15");
+    expect(out).toContain("Not a gap night — booking r2 (2026-08-14 – 2026-08-17) covers the night of 2026-08-15");
     expect(out).not.toMatch(/→ (FILL|SKIP)/);
   });
 
@@ -177,38 +177,38 @@ describe("gapNightReport", () => {
     } catch (e) {
       message = (e as Error).message;
     }
-    expect(message).toContain('Kohdetta "ei-ole" ei löydy');
+    expect(message).toContain('Property "ei-ole" not found');
     expect(message).toContain("p01");
     expect(message).toContain("p10");
     expect(message).not.toContain("p11");
-    expect(message).toContain("10/12");
+    expect(message).toContain("10 of 12");
     expect(message).toContain("property_id");
   });
 
   it("tyhjä varausdata → selkeä virhe", () => {
     expect(() => gapNightReport("p1", DATE, baseData({ reservations: [] }))).toThrow(
-      /yhtään varausta/,
+      /No reservations/,
     );
   });
 
   it("ilman hintaa ja ilman WH-avainta → pelkkä lattia + candidate_price-ohje", () => {
     const out = gapNightReport("p1", DATE, baseData());
-    expect(out).toContain("Lattia 118 €");
-    expect(out).toContain("Anna candidate_price");
+    expect(out).toContain("Floor €118");
+    expect(out).toContain("Provide candidate_price");
     expect(out).not.toMatch(/→ (FILL|SKIP)/);
   });
 
   it("WH-avain ilman hintaa → rehellinen viesti kytkennästä", () => {
     const out = gapNightReport("p1", DATE, baseData({ whKeyPresent: true }));
-    expect(out).toContain("Lattia 118 €");
-    expect(out).toContain("WH-hintasuositus kytketään kun WH-varausadapteri on valmis — anna candidate_price");
+    expect(out).toContain("Floor €118");
+    expect(out).toContain("The WH price recommendation will be wired in once the WH reservation adapter is ready — provide candidate_price");
   });
 
   it("ilman kustannusrivejä → manual-keskiarvo näkyy vaihtoarviossa", () => {
     const out = gapNightReport("p1", DATE, baseData({ costRows: [], candidatePrice: 100 }));
-    expect(out).toContain("ei kustannusrivejä → manual-keskiarvo 70 €");
-    expect(out).toContain("Lattia 95 € (vaihto 70 + matka 0 + kate 25)"); // 70 + 0 + 25
-    expect(out).toContain("→ FILL — täyttö tuottaa +5 €");
+    expect(out).toContain("no cost rows → manual average €70");
+    expect(out).toContain("Floor €95 (turnover 70 + travel 0 + margin 25)"); // 70 + 0 + 25
+    expect(out).toContain("→ FILL — filling yields +€5");
   });
 });
 
@@ -250,18 +250,18 @@ describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", (
     ).rejects.toThrow(/demo-1br-01/);
   });
 
-  it("varattu päivä → Ei aukkoyö", async () => {
+  it("varattu päivä → Not a gap night", async () => {
     const { property_id, date } = findMockDate(true);
     const out = await runGapNightCheck({ property_id, date }, env);
-    expect(out).toContain("Ei aukkoyö");
+    expect(out).toContain("Not a gap night");
     expect(out).toContain(property_id);
   });
 
-  it("aukkoyö ilman hintaa → lattia 95 € (manual 70 + matka 0 + kate 25) + ohje", async () => {
+  it("aukkoyö ilman hintaa → lattia €95 (manual 70 + matka 0 + kate 25) + ohje", async () => {
     const { property_id, date } = findMockDate(false);
     const out = await runGapNightCheck({ property_id, date }, env);
-    expect(out).toContain("Lattia 95 € (vaihto 70 + matka 0 + kate 25)");
-    expect(out).toContain("Anna candidate_price");
+    expect(out).toContain("Floor €95 (turnover 70 + travel 0 + margin 25)");
+    expect(out).toContain("Provide candidate_price");
   });
 
   it("aukkoyö + candidate_price → FILL/SKIP lattiaa vasten", async () => {
@@ -276,8 +276,8 @@ describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", (
     // Sama päivä näkyy aukkona analyze_portfolion kesäkuu-ikkunassa —
     // porautumispolku analyysistä aukkoon ei saa katketa (ikkunariippumattomuus).
     const out = await runGapNightCheck({ property_id: "demo-1br-01", date: "2026-06-23" }, env);
-    expect(out).not.toContain("Ei aukkoyö");
-    expect(out).toContain("Lattia 95 €"); // manual 70 + matka 0 + kate 25
+    expect(out).not.toContain("Not a gap night");
+    expect(out).toContain("Floor €95"); // manual 70 + matka 0 + kate 25
   });
 
   it("kelvoton MIN_MARGIN kaatuu selkeästi", async () => {

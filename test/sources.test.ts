@@ -41,7 +41,7 @@ describe("csvSource", () => {
   it("kaatuu selkeästi kun rivi puuttuu eikä fallbackia ole", async () => {
     const path = writeCsv(["r1,p1,2026-06-01,2026-06-03,2,200,55,0,0,2026-06-03,false"]);
     await expect(csvSource({ path }).getCosts([res("r1"), res("r2")])).rejects.toThrow(
-      /puuttuu kustannusrivi.*r2/,
+      /no cost row.*r2/,
     );
   });
 
@@ -55,7 +55,7 @@ describe("csvSource", () => {
     const dir = mkdtempSync(join(tmpdir(), "margin-csv-"));
     const path = join(dir, "bad.csv");
     writeFileSync(path, "reservation_id,foo\nr1,1");
-    expect(() => csvSource({ path })).toThrow(/puuttuu sarakkeet/);
+    expect(() => csvSource({ path })).toThrow(/missing columns/);
   });
 
   it("kertoo toimintaohjeen kun tiedostoa ei ole", () => {
@@ -117,7 +117,7 @@ describe("cleanhubSource", () => {
       token: "tok",
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ rows: [] }) }),
     });
-    await expect(src.getCosts([res("r1")])).rejects.toThrow(/JSON-taulukko/);
+    await expect(src.getCosts([res("r1")])).rejects.toThrow(/JSON array/);
   });
 
   it("getRows hakee rivit annetulta aikaväliltä matchaus-kenttineen", async () => {

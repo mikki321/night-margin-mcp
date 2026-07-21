@@ -18,7 +18,7 @@ interface CsvRow {
 function num(row: CsvRow, field: keyof CsvRow, line: number): number {
   const n = Number(row[field]);
   if (Number.isNaN(n)) {
-    throw new Error(`CSV rivi ${line}: kenttä ${field}="${row[field]}" ei ole luku`);
+    throw new Error(`CSV line ${line}: field ${field}="${row[field]}" is not a number`);
   }
   return n;
 }
@@ -34,13 +34,13 @@ export function csvSource(opts: { path: string; fallbackAvg?: number }): CostSou
     }) as CsvRow[];
   } catch (e) {
     throw new Error(
-      `CSV:n luku epäonnistui (${opts.path}): ${(e as Error).message} — tarkista CSV_PATH`,
+      `Failed to read CSV (${opts.path}): ${(e as Error).message} — check CSV_PATH`,
     );
   }
   const required = ["reservation_id", "cleaning_cost", "travel_cost", "laundry_cost"];
   const missing = required.filter((c) => rows.length > 0 && !(c in rows[0]));
   if (missing.length > 0) {
-    throw new Error(`CSV:stä puuttuu sarakkeet: ${missing.join(", ")} (${opts.path})`);
+    throw new Error(`CSV is missing columns: ${missing.join(", ")} (${opts.path})`);
   }
 
   const byId = new Map<string, TurnoverCost>();
@@ -63,7 +63,7 @@ export function csvSource(opts: { path: string; fallbackAvg?: number }): CostSou
   });
 
   return {
-    label: `csv (${opts.path}, ${byId.size} riviä)`,
+    label: `csv (${opts.path}, ${byId.size} rows)`,
     async getRows() {
       return costRows;
     },
@@ -87,9 +87,9 @@ export function csvSource(opts: { path: string; fallbackAvg?: number }): CostSou
       }
       if (missingIds.length > 0) {
         throw new Error(
-          `${missingIds.length} varaukselta puuttuu kustannusrivi CSV:stä (esim. ${missingIds
+          `${missingIds.length} reservation(s) have no cost row in the CSV (e.g. ${missingIds
             .slice(0, 3)
-            .join(", ")}) — lisää rivit tai aseta AVG_TURNOVER_COST fallbackiksi`,
+            .join(", ")}) — add the rows or set AVG_TURNOVER_COST as a fallback`,
         );
       }
       return map;

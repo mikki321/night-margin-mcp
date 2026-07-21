@@ -73,11 +73,11 @@ export function simulateFillGaps(
 ): SimulationResult {
   const discountPct = opts.discountPct ?? 40;
   if (discountPct < 0 || discountPct > 100) {
-    throw new Error(`discountPct=${discountPct} ei kelpaa — anna alennus väliltä 0–100`);
+    throw new Error(`discountPct=${discountPct} is invalid — provide a discount between 0 and 100`);
   }
   const fromT = parseISODate(from);
   const toT = parseISODate(to);
-  if (toT <= fromT) throw new Error(`Jakson loppu (${to}) pitää olla alun (${from}) jälkeen`);
+  if (toT <= fromT) throw new Error(`Period end (${to}) must be after the start (${from})`);
   const periodNights = nightsInPeriod(from, to);
 
   // Ryhmittele jaksolle osuvat varaukset kohteittain — sama sisällytyssääntö
@@ -107,7 +107,7 @@ export function simulateFillGaps(
       .filter((c): c is TurnoverCost => c !== undefined);
     if (costRows.length === 0) {
       throw new Error(
-        `Kohteen ${propertyId} varauksilta puuttuvat kustannusrivit — tarkista kustannuslähde (COST_SOURCE)`,
+        `Reservations for property ${propertyId} have no cost rows — check the cost source (COST_SOURCE)`,
       );
     }
     const gapCost = medianTotalCost(costRows);
@@ -166,10 +166,10 @@ export function simulateMinStayUplift(
   const minStay = opts.minStay ?? 3;
   const upliftPct = opts.upliftPct ?? 10;
   if (!Number.isInteger(minStay) || minStay < 1) {
-    throw new Error(`minStay=${minStay} ei kelpaa — anna kokonaisluku ≥ 1`);
+    throw new Error(`minStay=${minStay} is invalid — provide an integer ≥ 1`);
   }
   if (upliftPct <= -100) {
-    throw new Error(`upliftPct=${upliftPct} ei kelpaa — anna korotus suurempi kuin −100`);
+    throw new Error(`upliftPct=${upliftPct} is invalid — provide an uplift greater than -100`);
   }
 
   const factor = 1 + upliftPct / 100;

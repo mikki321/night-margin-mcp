@@ -14,7 +14,7 @@ export interface CostRow extends TurnoverCost {
 }
 
 export interface CostSource {
-  /** Näytetään tool-vastauksen otsikossa, esim. "manual (70 €/vaihto)". */
+  /** Näytetään tool-vastauksen otsikossa, esim. "manual (€70/turnover)". */
   label: string;
   getCosts(reservations: Reservation[]): Promise<Map<string, TurnoverCost>>;
   /**

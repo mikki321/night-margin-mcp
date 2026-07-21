@@ -171,7 +171,7 @@ describe("simulateFillGaps", () => {
   it("hylkää kelvottoman alennuksen ja väärinpäin olevan jakson", () => {
     const { reservations, costs } = fixture();
     expect(() => simulateFillGaps(reservations, costs, FROM, TO, { discountPct: 150 })).toThrow(/discountPct/);
-    expect(() => simulateFillGaps(reservations, costs, TO, FROM)).toThrow(/jälkeen/);
+    expect(() => simulateFillGaps(reservations, costs, TO, FROM)).toThrow(/must be after/);
   });
 });
 
@@ -245,22 +245,22 @@ describe("formatComparison", () => {
     const text = formatComparison(
       [
         { label: "Baseline", analysis: base, turnovers: countTurnovers(reservations, FROM, TO) },
-        { label: "A: täytä aukkoyöt (ale 40 %)", analysis: a, turnovers: countTurnovers(simA.reservations, FROM, TO) },
-        { label: "B: min-stay 3 yötä + hinnat +10 %", analysis: b, turnovers: countTurnovers(simB.reservations, FROM, TO) },
+        { label: "A: fill gap nights (40% off)", analysis: a, turnovers: countTurnovers(simA.reservations, FROM, TO) },
+        { label: "B: min stay 3 nights + prices +10%", analysis: b, turnovers: countTurnovers(simB.reservations, FROM, TO) },
       ],
       FROM,
       TO,
-      "manual (testi)",
-      "varaukset: fixtuuri",
+      "manual (test)",
+      "reservations: fixture",
     );
 
-    expect(text).toContain("## Strategiavertailu 2026-07-01 → 2026-07-11");
-    expect(text).toContain("| Skenaario | Brutto | Netto | Netto/yö | Käyttöaste | Vaihdot | Vuoto |");
-    expect(text).toContain("**A** nostaa käyttöastetta +10,0 pp mutta netto/yö muuttuu −2 €");
-    expect(text).toContain("**B** laskee käyttöastetta");
+    expect(text).toContain("## Strategy comparison 2026-07-01 → 2026-07-11");
+    expect(text).toContain("| Scenario | Gross | Net | Net/night | Occupancy | Turnovers | Leak |");
+    expect(text).toContain("**A** raises occupancy by +10.0 pp but net/night changes by -€2");
+    expect(text).toContain("**B** lowers occupancy");
     // fixtuurissa A: brutto +120 €, netto −40 € → ydinviesti mukana
-    expect(text).toContain("bruttoa optimoiva täyttö on nettona tappio");
-    expect(text).toContain("**Yhteenveto:** Paras netto/yö: Baseline");
+    expect(text).toContain("gross-optimizing fill is a net loss");
+    expect(text).toContain("**Summary:** Best net/night: Baseline");
   });
 });
 

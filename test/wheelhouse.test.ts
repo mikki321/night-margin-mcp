@@ -13,7 +13,7 @@ function clientWith(fetchImpl: FetchLike): WheelhouseClient {
 describe("reservationSourceFromEnv", () => {
   it("ilman avainta → mock-source", () => {
     const src = reservationSourceFromEnv({} as NodeJS.ProcessEnv);
-    expect(src.label).toContain("synteettinen");
+    expect(src.label).toContain("synthetic");
   });
 
   it("avaimella → wheelhouse-source", () => {

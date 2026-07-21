@@ -74,7 +74,7 @@ describe("resolveCosts — yhteinen kohdistus kaikille tooleille", () => {
     );
     expect(costs.get("r1")!.cleaning_cost).toBe(55);
     expect(costs.get("wh-2")!.cleaning_cost).toBe(60); // komposiittiosuma
-    expect(matchNote).toBe("Kustannuskohdistus: 1 id, 1 komposiitti");
+    expect(matchNote).toBe("Cost attribution: 1 id, 1 composite");
   });
 
   it("puuttuva rivi ILMAN fallbackia → selkeä virhe toimintaohjeineen (haara 5 saavutettavissa)", async () => {
@@ -94,7 +94,7 @@ describe("resolveCosts — yhteinen kohdistus kaikille tooleille", () => {
       70,
     );
     expect(costs.get("orpo")!.cleaning_cost).toBe(70);
-    expect(matchNote).toBe("Kustannuskohdistus: 1 id, 1 keskiarvo");
+    expect(matchNote).toBe("Cost attribution: 1 id, 1 average");
   });
 
   it("duplikaattikomposiitit nostavat varoituksen kohdistusriville", async () => {
@@ -108,7 +108,7 @@ describe("resolveCosts — yhteinen kohdistus kaikille tooleille", () => {
       "2026-06-01",
       "2026-07-01",
     );
-    expect(matchNote).toContain("Kustannuskohdistus: 2 komposiitti");
-    expect(matchNote).toContain("varoitus:");
+    expect(matchNote).toContain("Cost attribution: 2 composite");
+    expect(matchNote).toContain("warning:");
   });
 });

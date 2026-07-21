@@ -9,7 +9,11 @@ const MS_PER_DAY = 86_400_000;
 const WINDOW_BEFORE_DAYS = 45;
 const WINDOW_AFTER_DAYS = 15;
 
-const eur = (n: number): string => `${Math.round(n).toLocaleString("fi-FI")} €`;
+const eur = (n: number): string => {
+  const v = Math.round(n);
+  const s = Math.abs(v).toLocaleString("en-US");
+  return v < 0 ? `-€${s}` : `€${s}`;
+};
 const isoDay = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
 
 /** Varaushaun ikkuna: [date − 45 pv, date + 15 pv]. */
@@ -80,7 +84,7 @@ export interface GapNightData {
    */
   recommendedPrice?: number;
   whKeyPresent?: boolean;
-  /** CostSourcen label, esim. "csv (examples/sample-costs.csv, 181 riviä)". */
+  /** CostSourcen label, esim. "csv (examples/sample-costs.csv, 181 rows)". */
   costLabel?: string;
   /** Lisähuomautus kustannusriveistä (esim. haun epäonnistuminen). */
   costNote?: string;
@@ -91,25 +95,25 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
   const known = [...new Set(data.reservations.map((r) => r.property_id))].sort();
   if (known.length === 0) {
     throw new Error(
-      `Varausdatassa ei ole yhtään varausta ikkunalla ${data.from} – ${data.to} — tarkista datalähde ja päivämäärä`,
+      `No reservations in the data within the window ${data.from} – ${data.to} — check the data source and the date`,
     );
   }
   if (!known.includes(propertyId)) {
     const shown = known.slice(0, 10);
-    const suffix = known.length > 10 ? ` (10/${known.length} näytetty)` : "";
+    const suffix = known.length > 10 ? ` (showing 10 of ${known.length})` : "";
     throw new Error(
-      `Kohdetta "${propertyId}" ei löydy varausdatasta ikkunalla ${data.from} – ${data.to}. ` +
-        `Tunnetut kohteet${suffix}: ${shown.join(", ")} — tarkista property_id`,
+      `Property "${propertyId}" not found in the reservation data within the window ${data.from} – ${data.to}. ` +
+        `Known properties${suffix}: ${shown.join(", ")} — check property_id`,
     );
   }
 
-  const header = `## Aukkoyötarkistus: ${propertyId} · ${date}`;
+  const header = `## Gap night check: ${propertyId} · ${date}`;
 
   const booking = findBooking(data.reservations, propertyId, date);
   if (booking) {
     return [
       header,
-      `Ei aukkoyö — varaus ${booking.reservation_id} (${booking.checkin} – ${booking.checkout}) kattaa yön ${date}.`,
+      `Not a gap night — booking ${booking.reservation_id} (${booking.checkin} – ${booking.checkout}) covers the night of ${date}.`,
     ].join("\n");
   }
 
@@ -117,21 +121,21 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
   const floor = gapNightFloor(est.turnover, est.travel, data.minMargin);
 
   const estimateNote = est.fromRows
-    ? `vaihtoarvio: mediaani ${est.rowCount} kustannusrivistä`
-    : `vaihtoarvio: ei kustannusrivejä → manual-keskiarvo ${eur(data.manualAvg)}`;
+    ? `turnover estimate: median of ${est.rowCount} cost rows`
+    : `turnover estimate: no cost rows → manual average ${eur(data.manualAvg)}`;
   const sourceLine = [
-    `Kustannuslähde: ${data.costLabel ?? "tuntematon"}`,
+    `Cost source: ${data.costLabel ?? "unknown"}`,
     estimateNote,
     ...(data.costNote ? [data.costNote] : []),
   ].join(" · ");
 
-  const floorPart = `Lattia ${eur(floor)} (vaihto ${Math.round(est.turnover)} + matka ${Math.round(est.travel)} + kate ${Math.round(data.minMargin)})`;
+  const floorPart = `Floor ${eur(floor)} (turnover ${Math.round(est.turnover)} + travel ${Math.round(est.travel)} + margin ${Math.round(data.minMargin)})`;
 
   const price =
     data.candidatePrice !== undefined
-      ? { value: data.candidatePrice, label: "ehdokashinta" }
+      ? { value: data.candidatePrice, label: "candidate price" }
       : data.recommendedPrice !== undefined
-        ? { value: data.recommendedPrice, label: "WH-suositus" }
+        ? { value: data.recommendedPrice, label: "WH recommendation" }
         : undefined;
 
   let verdictLine: string;
@@ -139,11 +143,11 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
     const diff = price.value - floor;
     const verdict = diff >= 0 ? "FILL" : "SKIP";
     const diffTxt = diff >= 0 ? `+${eur(diff)}` : eur(diff);
-    verdictLine = `${floorPart} · ${price.label} ${eur(price.value)} → ${verdict} — täyttö tuottaa ${diffTxt}.`;
+    verdictLine = `${floorPart} · ${price.label} ${eur(price.value)} → ${verdict} — filling yields ${diffTxt}.`;
   } else if (data.whKeyPresent) {
-    verdictLine = `${floorPart}. WH-hintasuositus kytketään kun WH-varausadapteri on valmis — anna candidate_price, niin saat FILL/SKIP-verdiktin.`;
+    verdictLine = `${floorPart}. The WH price recommendation will be wired in once the WH reservation adapter is ready — provide candidate_price to get a FILL/SKIP verdict.`;
   } else {
-    verdictLine = `${floorPart}. Anna candidate_price (€/yö), niin saat FILL/SKIP-verdiktin — FILL kun hinta ≥ lattia.`;
+    verdictLine = `${floorPart}. Provide candidate_price (€/night) to get a FILL/SKIP verdict — FILL when price ≥ floor.`;
   }
 
   return [header, sourceLine, verdictLine].join("\n");
@@ -195,7 +199,7 @@ export async function runGapNightCheck(
         .filter((c): c is TurnoverCost => c !== undefined);
       if (matchNote) costNote = matchNote;
     } catch (e) {
-      costNote = `kustannusrivien haku epäonnistui (${(e as Error).message})`;
+      costNote = `failed to fetch cost rows (${(e as Error).message})`;
     }
   }
 

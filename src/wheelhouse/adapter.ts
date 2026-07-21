@@ -8,13 +8,13 @@ import type { WheelhouseClient, WhListing } from "./client.js";
  */
 export function parseWhReservations(_raw: unknown, _listing: WhListing): Reservation[] {
   throw new Error(
-    "Wheelhouse-varausten parseri odottaa oikeaa API-vastausta (aja README:n curl #2 ja liitä vastaus)",
+    "The Wheelhouse reservation parser expects a real API response (run curl #2 from the README and paste the response)",
   );
 }
 
 export function wheelhouseReservations(client: WheelhouseClient): ReservationSource {
   return {
-    label: "Wheelhouse RM API (oma portfolio)",
+    label: "Wheelhouse RM API (your portfolio)",
     async getReservations(from, to) {
       const listings = (await client.listListings()).filter((l) => l.is_active !== false);
       const all: Reservation[] = [];

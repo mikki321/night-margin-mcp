@@ -85,7 +85,7 @@ describe("matchCosts — kaskadin haarat", () => {
   it("(5) ilman fallbackia heittää virheen: max 3 esimerkki-id:tä + toimintaohje", () => {
     const orphans = [res("o1"), res("o2"), res("o3"), res("o4")];
     expect(() => matchCosts(orphans, [])).toThrow(
-      /4 varaukselle.*esim\. o1, o2, o3\).*AVG_TURNOVER_COST/,
+      /4 reservation\(s\).*e\.g\. o1, o2, o3\).*AVG_TURNOVER_COST/,
     );
     expect(() => matchCosts(orphans, [])).not.toThrow(/o4/);
   });
@@ -124,7 +124,7 @@ describe("matchCosts — kaskadin haarat", () => {
     const { report, warnings } = matchCosts([res("x"), res("y")], rows);
     expect(report.by_composite).toBe(2);
     expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain("komposiittiavainta");
+    expect(warnings[0]).toContain("composite key");
   });
 
   it("normaalidata ei tuota varoituksia", () => {
@@ -156,13 +156,13 @@ describe("formatMatchReport", () => {
   it("näyttää vain nollasta poikkeavat luokat", () => {
     expect(
       formatMatchReport({ by_id: 41, by_code: 0, by_composite: 6, by_fallback: 3 }),
-    ).toBe("Kustannuskohdistus: 41 id, 6 komposiitti, 3 keskiarvo");
+    ).toBe("Cost attribution: 41 id, 6 composite, 3 average");
   });
 
   it("näyttää koodiluokan kun sitä on", () => {
     expect(
       formatMatchReport({ by_id: 2, by_code: 1, by_composite: 0, by_fallback: 0 }),
-    ).toBe("Kustannuskohdistus: 2 id, 1 koodi");
+    ).toBe("Cost attribution: 2 id, 1 code");
   });
 
   it("palauttaa tyhjän kun kaikki luokat ovat nollia", () => {

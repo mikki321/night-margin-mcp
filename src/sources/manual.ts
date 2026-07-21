@@ -14,7 +14,7 @@ export function parseTiers(raw: string | undefined): CostTier[] {
     const [match, cost] = part.split(":").map((s) => s.trim());
     const n = Number(cost);
     if (!match || Number.isNaN(n)) {
-      throw new Error(`Virheellinen COST_TIERS-arvo "${part}" — käytä muotoa "1br:55,2br:70"`);
+      throw new Error(`Invalid COST_TIERS value "${part}" — use the format "1br:55,2br:70"`);
     }
     return { match, cost: n };
   });
@@ -28,8 +28,8 @@ export function manualSource(opts: { avgTurnoverCost: number; tiers?: CostTier[]
 
   return {
     label: tiers.length
-      ? `manual (tierit: ${tiers.map((t) => `${t.match}:${t.cost}€`).join(", ")}, muut ${opts.avgTurnoverCost}€)`
-      : `manual (${opts.avgTurnoverCost} €/vaihto)`,
+      ? `manual (tiers: ${tiers.map((t) => `${t.match}:€${t.cost}`).join(", ")}, others €${opts.avgTurnoverCost})`
+      : `manual (€${opts.avgTurnoverCost}/turnover)`,
     async getCosts(reservations: Reservation[]) {
       const map = new Map<string, TurnoverCost>();
       for (const r of reservations) {

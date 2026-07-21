@@ -11,18 +11,18 @@ const server = new McpServer({ name: "night-margin-mcp", version: "0.2.0" });
 server.registerTool(
   "analyze_portfolio",
   {
-    title: "Analysoi portfolion netto per yö",
+    title: "Analyze portfolio net per available night",
     description:
-      "Laskee lyhytvuokrausportfolion netton vaihtokustannusten (siivous, pyykki, matkat) jälkeen: " +
-      "netto per käytettävissä oleva yö, vuoto (nettonegatiiviset varaukset) sekä parhaat ja heikoimmat kohteet.",
+      "Computes a short-term rental portfolio's net after turnover costs (cleaning, laundry, travel): " +
+      "net per available night, leak (net-negative bookings), and the best and worst properties.",
     inputSchema: {
-      from: z.string().describe("Jakson alku, YYYY-MM-DD"),
-      to: z.string().describe("Jakson loppu (eksklusiivinen), YYYY-MM-DD"),
+      from: z.string().describe("Period start, YYYY-MM-DD"),
+      to: z.string().describe("Period end (exclusive), YYYY-MM-DD"),
       avg_turnover_cost: z
         .number()
         .positive()
         .optional()
-        .describe("Ohita AVG_TURNOVER_COST tälle ajolle: € per vaihto (manual-tila)"),
+        .describe("Override AVG_TURNOVER_COST for this run: € per turnover (manual mode)"),
     },
   },
   async (args) => {
@@ -31,7 +31,7 @@ server.registerTool(
       return { content: [{ type: "text" as const, text }] };
     } catch (e) {
       return {
-        content: [{ type: "text" as const, text: `Virhe: ${(e as Error).message}` }],
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
         isError: true,
       };
     }
@@ -41,33 +41,33 @@ server.registerTool(
 server.registerTool(
   "compare_strategies",
   {
-    title: "Vertaile hinnoittelustrategioita nettona",
+    title: "Compare pricing strategies on net",
     description:
-      "Simuloi kaksi hinnoittelustrategiaa ja vertaa niitä baselineen nettona vaihtokustannusten jälkeen: " +
-      "A täyttää aukkoyöt alennuksella (oletus 40 % alennus kohteen ADR:stä), B pudottaa alle minimioleskelun " +
-      "varaukset ja korottaa loppujen hintoja (oletus min 3 yötä, +10 %). Näyttää per skenaario brutto, netto, " +
-      "netto/yö, käyttöaste, vaihdot ja vuoto — paljastaa milloin bruttoa optimoiva täyttö on nettona tappio.",
+      "Simulates two pricing strategies and compares them to the baseline on net after turnover costs: " +
+      "A fills gap nights at a discount (default 40% off the property's ADR), B drops bookings below a minimum " +
+      "stay and raises the remaining prices (default min 3 nights, +10%). Shows gross, net, net/night, " +
+      "occupancy, turnovers, and leak per scenario — revealing when gross-optimizing fill is a net loss.",
     inputSchema: {
-      from: z.string().describe("Jakson alku, YYYY-MM-DD"),
-      to: z.string().describe("Jakson loppu (eksklusiivinen), YYYY-MM-DD"),
+      from: z.string().describe("Period start, YYYY-MM-DD"),
+      to: z.string().describe("Period end (exclusive), YYYY-MM-DD"),
       discount_pct: z
         .number()
         .min(0)
         .max(100)
         .optional()
-        .describe("Strategia A: aukkoyön hinnan alennus prosentteina kohteen ADR:stä (oletus 40)"),
+        .describe("Strategy A: gap night price discount as a percentage of the property's ADR (default 40)"),
       min_stay: z
         .number()
         .int()
         .min(1)
         .optional()
-        .describe("Strategia B: minimioleskelu öinä — tätä lyhyemmät varaukset pudotetaan (oletus 3)"),
+        .describe("Strategy B: minimum stay in nights — bookings shorter than this are dropped (default 3)"),
       uplift_pct: z
         .number()
         .min(0)
         .max(100)
         .optional()
-        .describe("Strategia B: jäljelle jäävien varausten hinnankorotus prosentteina (oletus 10)"),
+        .describe("Strategy B: price uplift percentage for the remaining bookings (default 10)"),
     },
   },
   async (args) => {
@@ -76,7 +76,7 @@ server.registerTool(
       return { content: [{ type: "text" as const, text }] };
     } catch (e) {
       return {
-        content: [{ type: "text" as const, text: `Virhe: ${(e as Error).message}` }],
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
         isError: true,
       };
     }
@@ -86,19 +86,19 @@ server.registerTool(
 server.registerTool(
   "gap_night_check",
   {
-    title: "Tarkista aukkoyön täyttö (FILL/SKIP)",
+    title: "Check gap night fill (FILL/SKIP)",
     description:
-      "Tarkistaa kannattaako yksittäinen aukkoyö täyttää: laskee lattiahinnan (vaihtokustannus + matka + minimikate MIN_MARGIN) " +
-      "kohteen toteutuneiden kustannusrivien mediaanista ja vertaa ehdokashintaan → FILL jos hinta ≥ lattia, muuten SKIP. " +
-      "Jos päivä on jo varattu, kertoo mikä varaus sen kattaa.",
+      "Checks whether filling a single gap night is worth it: computes the floor price (turnover cost + travel + minimum margin MIN_MARGIN) " +
+      "from the median of the property's actual cost rows and compares the candidate price against it → FILL if price ≥ floor, otherwise SKIP. " +
+      "If the date is already booked, reports which booking covers it.",
     inputSchema: {
-      property_id: z.string().min(1).describe("Kohteen tunnus varausdatassa (property_id)"),
-      date: z.string().describe("Tarkistettava yö, YYYY-MM-DD"),
+      property_id: z.string().min(1).describe("Property identifier in the reservation data (property_id)"),
+      date: z.string().describe("Night to check, YYYY-MM-DD"),
       candidate_price: z
         .number()
         .positive()
         .optional()
-        .describe("Ehdokashinta €/yö — verrataan lattiahintaan; ilman tätä näytetään pelkkä lattia + ohje"),
+        .describe("Candidate price €/night — compared against the floor price; without it only the floor + guidance is shown"),
     },
   },
   async (args) => {
@@ -107,7 +107,7 @@ server.registerTool(
       return { content: [{ type: "text" as const, text }] };
     } catch (e) {
       return {
-        content: [{ type: "text" as const, text: `Virhe: ${(e as Error).message}` }],
+        content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
         isError: true,
       };
     }
@@ -115,4 +115,4 @@ server.registerTool(
 );
 
 await server.connect(new StdioServerTransport());
-console.error("night-margin-mcp käynnissä (stdio)");
+console.error("night-margin-mcp running (stdio)");

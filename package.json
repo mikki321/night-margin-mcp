@@ -1,7 +1,7 @@
 {
   "name": "night-margin-mcp",
   "version": "0.2.0",
-  "description": "Katemoottori — netto per käytettävissä oleva yö. MCP-serveri lyhytvuokrausportfolion vaihtokustannusanalyysiin.",
+  "description": "Margin engine for short-term rentals — net per available night, after turnover costs. MCP server for Claude.",
   "license": "MIT",
   "keywords": [
     "mcp",

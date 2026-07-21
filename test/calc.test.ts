@@ -42,7 +42,7 @@ describe("nightsInPeriod", () => {
   });
 
   it("hylkää virheellisen päivämäärän", () => {
-    expect(() => nightsInPeriod("07/01/2026", "2026-07-08")).toThrow(/Virheellinen/);
+    expect(() => nightsInPeriod("07/01/2026", "2026-07-08")).toThrow(/Invalid/);
   });
 });
 
@@ -130,7 +130,7 @@ describe("analyzePortfolio", () => {
 
   it("kaatuu selkeästi jos kustannusrivi puuttuu", () => {
     expect(() => analyzePortfolio(reservations, costMap(cost("r1", 70)), from, to)).toThrow(
-      /puuttuu kustannusrivi/,
+      /has no cost row/,
     );
   });
 });

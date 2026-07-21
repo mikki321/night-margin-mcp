@@ -128,16 +128,16 @@ export function matchCosts(
 
   if (unmatched.length > 0) {
     throw new Error(
-      `${unmatched.length} varaukselle ei löytynyt kustannusriviä (esim. ${unmatched
+      `No cost row found for ${unmatched.length} reservation(s) (e.g. ${unmatched
         .slice(0, 3)
-        .join(", ")}) — lisää lähteeseen rivit (reservation_id tai property_id+checkin+checkout) tai aseta AVG_TURNOVER_COST fallbackiksi`,
+        .join(", ")}) — add rows (reservation_id or property_id+checkin+checkout) to the source or set AVG_TURNOVER_COST as a fallback`,
     );
   }
 
   const warnings: string[] = [];
   if (duplicateCompositeKeys > 0) {
     warnings.push(
-      `varoitus: ${duplicateCompositeKeys} komposiittiavainta (kohde+checkin+checkout) esiintyy useammalla kustannusrivillä — kukin rivi kohdistettu vain kerran`,
+      `warning: ${duplicateCompositeKeys} composite key(s) (property+checkin+checkout) appear on multiple cost rows — each row was attributed only once`,
     );
   }
 
@@ -145,14 +145,14 @@ export function matchCosts(
 }
 
 /**
- * "Kustannuskohdistus: 41 id, 6 komposiitti, 3 keskiarvo" — vain nollasta
+ * "Cost attribution: 41 id, 6 composite, 3 average" — vain nollasta
  * poikkeavat luokat. Tyhjä merkkijono jos kaikki luokat ovat nollia.
  */
 export function formatMatchReport(report: MatchReport): string {
   const parts: string[] = [];
   if (report.by_id > 0) parts.push(`${report.by_id} id`);
-  if (report.by_code > 0) parts.push(`${report.by_code} koodi`);
-  if (report.by_composite > 0) parts.push(`${report.by_composite} komposiitti`);
-  if (report.by_fallback > 0) parts.push(`${report.by_fallback} keskiarvo`);
-  return parts.length > 0 ? `Kustannuskohdistus: ${parts.join(", ")}` : "";
+  if (report.by_code > 0) parts.push(`${report.by_code} code`);
+  if (report.by_composite > 0) parts.push(`${report.by_composite} composite`);
+  if (report.by_fallback > 0) parts.push(`${report.by_fallback} average`);
+  return parts.length > 0 ? `Cost attribution: ${parts.join(", ")}` : "";
 }

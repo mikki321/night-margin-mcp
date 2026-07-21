@@ -4,14 +4,20 @@ import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
 import { avgFallbackFromEnv, resolveCosts } from "../sources/resolveCosts.js";
 
-const eur = (n: number): string => `${Math.round(n).toLocaleString("fi-FI")} €`;
-const eur2 = (n: number): string =>
-  `${n.toLocaleString("fi-FI", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} €`;
-const pct = (n: number): string => `${n.toFixed(1).replace(".", ",")} %`;
+const eur = (n: number): string => {
+  const v = Math.round(n);
+  const s = Math.abs(v).toLocaleString("en-US");
+  return v < 0 ? `-€${s}` : `€${s}`;
+};
+const eur2 = (n: number): string => {
+  const s = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+  return n < 0 ? `-€${s}` : `€${s}`;
+};
+const pct = (n: number): string => `${n.toFixed(1)}%`;
 
 function propertyTable(rows: PropertyStats[]): string {
   const lines = [
-    "| Kohde | Netto/yö | Varatut yöt | Aukkoyöt | Netto € |",
+    "| Property | Net/night | Booked nights | Gap nights | Net € |",
     "|---|---:|---:|---:|---:|",
   ];
   for (const p of rows) {
@@ -29,18 +35,18 @@ export function formatAnalysis(a: PortfolioAnalysis, sourceLabel: string, dataNo
 
   const parts: string[] = [];
   parts.push(`## Portfolio ${a.from} → ${a.to}`);
-  parts.push(`Kustannuslähde: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
+  parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
   parts.push(
     [
-      `**Netto per käytettävissä oleva yö: ${eur2(a.totals.net_per_available_night)}**`,
-      `Käyttöaste ${pct(a.totals.occupancy_pct)} (${a.totals.booked_nights} varattua, ${a.totals.gap_nights} aukkoyötä)`,
-      `Brutto ${eur(a.totals.gross)} − vaihtokustannukset ${eur(a.totals.costs)} = netto ${eur(a.totals.net)}`,
-      `**Vuoto: ${eur(a.leak_eur)}** — ${pct(a.leak_pct)} varatuista öistä oli nettonegatiivisia (${a.negative_reservations.length} varausta)`,
+      `**Net per available night: ${eur2(a.totals.net_per_available_night)}**`,
+      `Occupancy ${pct(a.totals.occupancy_pct)} (${a.totals.booked_nights} booked, ${a.totals.gap_nights} gap nights)`,
+      `Gross ${eur(a.totals.gross)} − turnover costs ${eur(a.totals.costs)} = net ${eur(a.totals.net)}`,
+      `**Leak: ${eur(a.leak_eur)}** — ${pct(a.leak_pct)} of booked nights were net-negative (${a.negative_reservations.length} bookings)`,
     ].join("\n"),
   );
 
-  parts.push(`### Bottom ${bottom.length} (netto/yö)\n${propertyTable(bottom)}`);
-  parts.push(`### Top ${top.length} (netto/yö)\n${propertyTable(top)}`);
+  parts.push(`### Bottom ${bottom.length} (net/night)\n${propertyTable(bottom)}`);
+  parts.push(`### Top ${top.length} (net/night)\n${propertyTable(top)}`);
 
   if (a.negative_reservations.length > 0) {
     const rows = a.negative_reservations
@@ -50,14 +56,14 @@ export function formatAnalysis(a: PortfolioAnalysis, sourceLabel: string, dataNo
           `| ${r.reservation_id} | ${r.checkin} | ${r.nights} | ${eur(r.gross)} | ${eur(r.costs)} | ${eur(r.net)} |`,
       );
     parts.push(
-      `### Nettonegatiiviset varaukset\n| Varaus | Check-in | Yöt | Brutto | Kust. | Netto |\n|---|---|---:|---:|---:|---:|\n${rows.join("\n")}`,
+      `### Net-negative bookings\n| Booking | Check-in | Nights | Gross | Costs | Net |\n|---|---|---:|---:|---:|---:|\n${rows.join("\n")}`,
     );
   }
 
   const summary = worst
-    ? `Portfolio tuottaa nettona ${eur2(a.totals.net_per_available_night)}/yö; suurin parannuspotentiaali kohteessa ${worst.property_id} (${eur2(worst.net_per_available_night)}/yö), ja vuotoa syntyi ${eur(a.leak_eur)} — lyhyet halvat varaukset eivät kata vaihtokustannusta.`
-    : `Jaksolle ei osunut yhtään varausta — tarkista päivämäärät.`;
-  parts.push(`**Yhteenveto:** ${summary}`);
+    ? `The portfolio nets ${eur2(a.totals.net_per_available_night)}/night; the biggest improvement potential is in ${worst.property_id} (${eur2(worst.net_per_available_night)}/night), and leak totaled ${eur(a.leak_eur)} — short, cheap bookings do not cover their turnover cost.`
+    : `No bookings fell within the period — check the dates.`;
+  parts.push(`**Summary:** ${summary}`);
 
   return parts.join("\n\n");
 }
@@ -83,6 +89,6 @@ export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
 
   const analysis = analyzePortfolio(reservations, costs, args.from, args.to);
   const dataNote =
-    `varaukset: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
+    `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
   return formatAnalysis(analysis, costSource.label, dataNote);
 }

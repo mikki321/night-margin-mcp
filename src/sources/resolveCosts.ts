@@ -17,7 +17,7 @@ export function avgFallbackFromEnv(
   if (raw === undefined || raw.trim() === "") return undefined;
   const n = Number(raw);
   if (Number.isNaN(n) || n < 0) {
-    throw new Error(`AVG_TURNOVER_COST="${raw}" ei ole kelvollinen luku`);
+    throw new Error(`AVG_TURNOVER_COST="${raw}" is not a valid number`);
   }
   return n;
 }
@@ -25,7 +25,7 @@ export function avgFallbackFromEnv(
 export interface ResolvedCosts {
   /** avain = varauksen reservation_id (core/calc.ts:n odottama muoto) */
   costs: Map<string, TurnoverCost>;
-  /** "Kustannuskohdistus: 41 id, 6 komposiitti" — tyhjä kun lähde ei tarjoa raakarivejä (manual). */
+  /** "Cost attribution: 41 id, 6 composite" — tyhjä kun lähde ei tarjoa raakarivejä (manual). */
   matchNote: string;
 }
 

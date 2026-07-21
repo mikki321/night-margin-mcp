@@ -62,21 +62,21 @@ export class WheelhouseClient {
       try {
         res = await this.fetchImpl(url, { headers: { "X-Integration-Api-Key": this.apiKey } });
       } catch (e) {
-        throw new Error(`Wheelhouse-yhteys epäonnistui (${url}): ${(e as Error).message}`);
+        throw new Error(`Wheelhouse connection failed (${url}): ${(e as Error).message}`);
       }
 
       if (res.status === 429) {
         if (attempt >= BACKOFF_MS.length) {
-          throw new Error("Wheelhouse rate limit (60 pyyntöä/min) täynnä — yritä hetken kuluttua uudelleen");
+          throw new Error("Wheelhouse rate limit reached (60 requests/min) — try again in a moment");
         }
         await this.sleep(BACKOFF_MS[attempt]);
         continue;
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error(`Wheelhouse hylkäsi avaimen (HTTP ${res.status}) — tarkista WHEELHOUSE_API_KEY`);
+        throw new Error(`Wheelhouse rejected the API key (HTTP ${res.status}) — check WHEELHOUSE_API_KEY`);
       }
       if (!res.ok) {
-        throw new Error(`Wheelhouse palautti HTTP ${res.status} (${url})`);
+        throw new Error(`Wheelhouse returned HTTP ${res.status} (${url})`);
       }
 
       const body = await res.json();
@@ -97,7 +97,7 @@ export class WheelhouseClient {
           ? ((body as { data: WhListing[] }).data)
           : null;
       if (!items) {
-        throw new Error("Wheelhouse /listings -vastaus ei ollut odotetussa muodossa (taulukko tai {data: [...]})");
+        throw new Error("Wheelhouse /listings response was not in the expected shape (array or {data: [...]})");
       }
       all.push(...items);
       if (items.length < perPage) return all;
@@ -115,7 +115,7 @@ export class WheelhouseClient {
     );
     const data = (body as { data?: unknown }).data;
     if (!Array.isArray(data)) {
-      throw new Error("Wheelhouse price_recommendations -vastauksesta puuttuu data-taulukko");
+      throw new Error("Wheelhouse price_recommendations response is missing the data array");
     }
     return data as WhPriceRec[];
   }

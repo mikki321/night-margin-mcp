@@ -11,7 +11,7 @@ export interface ReservationSource {
 
 export function mockReservationSource(): ReservationSource {
   return {
-    label: "synteettinen demo-data (aseta WHEELHOUSE_API_KEY analysoidaksesi omaa portfoliota)",
+    label: "synthetic demo data (set WHEELHOUSE_API_KEY to analyze your own portfolio)",
     async getReservations(from, to) {
       return generateMockReservations(from, to);
     },

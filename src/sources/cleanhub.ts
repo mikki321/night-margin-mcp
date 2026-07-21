@@ -38,19 +38,19 @@ export function cleanhubSource(opts: {
     try {
       res = await fetchImpl(url, { headers: { Authorization: `Bearer ${opts.token}` } });
     } catch (e) {
-      throw new Error(`CleanHub-haku epäonnistui (${base}): ${(e as Error).message}`);
+      throw new Error(`CleanHub request failed (${base}): ${(e as Error).message}`);
     }
     if (!res.ok) {
       throw new Error(
         res.status === 401 || res.status === 403
-          ? `CleanHub hylkäsi tokenin (HTTP ${res.status}) — tarkista CLEANHUB_TOKEN`
-          : `CleanHub palautti HTTP ${res.status} (${url})`,
+          ? `CleanHub rejected the token (HTTP ${res.status}) — check CLEANHUB_TOKEN`
+          : `CleanHub returned HTTP ${res.status} (${url})`,
       );
     }
     const body = (await res.json()) as unknown;
     const rows = Array.isArray(body) ? (body as CleanhubRow[]) : null;
     if (!rows) {
-      throw new Error("CleanHub-vastaus ei ollut JSON-taulukko — tarkista CLEANHUB_API_URL");
+      throw new Error("CleanHub response was not a JSON array — check CLEANHUB_API_URL");
     }
     return rows;
   }
@@ -76,7 +76,7 @@ export function cleanhubSource(opts: {
     async getRows(from?: string, to?: string) {
       if (!from || !to) {
         throw new Error(
-          "cleanhub-lähteen getRows tarvitsee aikavälin — kutsu getRows(from, to) ISO-päivillä",
+          "The cleanhub source's getRows requires a date range — call getRows(from, to) with ISO dates",
         );
       }
       const rows: CostRow[] = (await fetchRows(from, to)).map((row) => ({

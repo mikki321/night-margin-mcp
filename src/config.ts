@@ -9,7 +9,7 @@ function envNumber(env: NodeJS.ProcessEnv, name: string, fallback: number): numb
   const n = Number(raw);
   if (!Number.isFinite(n) || n < 0) {
     throw new Error(
-      `${name}="${raw}" ei ole kelvollinen luku — käytä ei-negatiivista euromäärää, esim. ${name}=${fallback}`,
+      `${name}="${raw}" is not a valid number — use a non-negative amount in euros, e.g. ${name}=${fallback}`,
     );
   }
   return n;

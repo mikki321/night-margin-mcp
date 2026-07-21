@@ -10,7 +10,7 @@ const MS_PER_DAY = 86_400_000;
 
 export function parseISODate(d: string): number {
   const t = Date.parse(`${d}T00:00:00Z`);
-  if (Number.isNaN(t)) throw new Error(`Virheellinen päivämäärä: "${d}" — käytä muotoa YYYY-MM-DD`);
+  if (Number.isNaN(t)) throw new Error(`Invalid date: "${d}" — use the format YYYY-MM-DD`);
   return t;
 }
 
@@ -64,7 +64,7 @@ export function analyzePortfolio(
 ): PortfolioAnalysis {
   const fromT = parseISODate(from);
   const toT = parseISODate(to);
-  if (toT <= fromT) throw new Error(`Jakson loppu (${to}) pitää olla alun (${from}) jälkeen`);
+  if (toT <= fromT) throw new Error(`Period end (${to}) must be after the start (${from})`);
 
   const periodNights = nightsInPeriod(from, to);
   const byProperty = new Map<string, { booked: number; gross: number; costs: number }>();
@@ -81,7 +81,7 @@ export function analyzePortfolio(
     const cost = costsById.get(r.reservation_id);
     if (!cost) {
       throw new Error(
-        `Varaukselta ${r.reservation_id} puuttuu kustannusrivi — tarkista kustannuslähde (COST_SOURCE)`,
+        `Reservation ${r.reservation_id} has no cost row — check the cost source (COST_SOURCE)`,
       );
     }
 

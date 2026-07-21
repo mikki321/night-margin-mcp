@@ -5,15 +5,21 @@ import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
 import { avgFallbackFromEnv, resolveCosts } from "../sources/resolveCosts.js";
 
-const eur = (n: number): string => `${Math.round(n).toLocaleString("fi-FI")} €`;
-const eur2 = (n: number): string =>
-  `${n.toLocaleString("fi-FI", { minimumFractionDigits: 0, maximumFractionDigits: 1 })} €`;
-const pct = (n: number): string => `${n.toFixed(1).replace(".", ",")} %`;
-/** Etumerkillinen delta: "+3,2 €" / "−3,2 €". */
+const eur = (n: number): string => {
+  const v = Math.round(n);
+  const s = Math.abs(v).toLocaleString("en-US");
+  return v < 0 ? `-€${s}` : `€${s}`;
+};
+const eur2 = (n: number): string => {
+  const s = Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+  return n < 0 ? `-€${s}` : `€${s}`;
+};
+const pct = (n: number): string => `${n.toFixed(1)}%`;
+/** Etumerkillinen delta: "+€3.2" / "-€3.2". */
 const sign = (n: number, fmt: (x: number) => string): string =>
   n >= 0 ? `+${fmt(n)}` : fmt(n);
-const pp = (n: number): string => `${n.toFixed(1).replace(".", ",").replace("-", "−")} pp`;
-const signedCount = (n: number): string => `${n >= 0 ? "+" : "−"}${Math.abs(n)}`;
+const pp = (n: number): string => `${n.toFixed(1)} pp`;
+const signedCount = (n: number): string => `${n >= 0 ? "+" : "-"}${Math.abs(n)}`;
 
 export interface CompareArgs {
   from: string;
@@ -46,7 +52,7 @@ export function countTurnovers(reservations: Reservation[], from: string, to: st
 
 function scenarioTable(scenarios: Scenario[]): string {
   const lines = [
-    "| Skenaario | Brutto | Netto | Netto/yö | Käyttöaste | Vaihdot | Vuoto |",
+    "| Scenario | Gross | Net | Net/night | Occupancy | Turnovers | Leak |",
     "|---|---:|---:|---:|---:|---:|---:|",
   ];
   for (const s of scenarios) {
@@ -68,13 +74,13 @@ function deltaSentence(name: string, s: Scenario, base: Scenario): string {
 
   const dLeak = s.analysis.leak_eur - base.analysis.leak_eur;
 
-  const occVerb = dOcc >= 0 ? "nostaa" : "laskee";
-  const link = dNetPerNight * dOcc < 0 || dNetPerNight * dGross < 0 ? "mutta" : "ja";
+  const occVerb = dOcc >= 0 ? "raises" : "lowers";
+  const link = dNetPerNight * dOcc < 0 || dNetPerNight * dGross < 0 ? "but" : "and";
   const leakNote =
-    dLeak > 0 ? ` Vuoto kasvaa ${eur(dLeak)} — osa uusista varauksista on nettonegatiivisia.` : "";
+    dLeak > 0 ? ` Leak grows by ${eur(dLeak)} — some of the new bookings are net-negative.` : "";
   return (
-    `**${name}** ${occVerb} käyttöastetta ${sign(dOcc, pp)} ${link} netto/yö muuttuu ${sign(dNetPerNight, eur2)} ` +
-    `(brutto ${sign(dGross, eur)}, netto ${sign(dNet, eur)}, vaihdot ${signedCount(dTurnovers)}).${leakNote}`
+    `**${name}** ${occVerb} occupancy by ${sign(dOcc, pp)} ${link} net/night changes by ${sign(dNetPerNight, eur2)} ` +
+    `(gross ${sign(dGross, eur)}, net ${sign(dNet, eur)}, turnovers ${signedCount(dTurnovers)}).${leakNote}`
   );
 }
 
@@ -88,9 +94,9 @@ export function formatComparison(
   const [base, a, b] = scenarios;
 
   const parts: string[] = [];
-  parts.push(`## Strategiavertailu ${from} → ${to}`);
-  parts.push(`Kustannuslähde: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
-  parts.push(`${scenarioTable(scenarios)}\n_Vaihdot = jaksolle osuvien varausten määrä._`);
+  parts.push(`## Strategy comparison ${from} → ${to}`);
+  parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
+  parts.push(`${scenarioTable(scenarios)}\n_Turnovers = number of bookings touching the period._`);
   parts.push([deltaSentence("A", a, base), deltaSentence("B", b, base)].join("\n"));
 
   const dGrossA = a.analysis.totals.gross - base.analysis.totals.gross;
@@ -102,12 +108,12 @@ export function formatComparison(
   )[0];
   let tension = "";
   if (dGrossA > 0 && dNetA < 0) {
-    tension = ` A tuo ${eur(dGrossA)} lisää bruttoa mutta ${eur(-dNetA)} vähemmän nettoa — bruttoa optimoiva täyttö on nettona tappio.`;
+    tension = ` A brings ${eur(dGrossA)} more gross but ${eur(-dNetA)} less net — gross-optimizing fill is a net loss.`;
   } else if (dLeakA > 0) {
-    tension = ` A:n aukkotäytöistä osa on tappiollisia (vuoto ${sign(dLeakA, eur)}) — halvimmissa kohteissa alennettu yö ei kata vaihtokustannusta.`;
+    tension = ` Some of A's gap fills lose money (leak ${sign(dLeakA, eur)}) — in the cheapest properties a discounted night does not cover the turnover cost.`;
   }
   parts.push(
-    `**Yhteenveto:** Paras netto/yö: ${best.label} (${eur2(best.analysis.totals.net_per_available_night)}/yö).${tension}`,
+    `**Summary:** Best net/night: ${best.label} (${eur2(best.analysis.totals.net_per_available_night)}/night).${tension}`,
   );
 
   return parts.join("\n\n");
@@ -148,18 +154,18 @@ export async function runCompareStrategies(args: CompareArgs): Promise<string> {
       turnovers: countTurnovers(reservations, args.from, args.to),
     },
     {
-      label: `A: täytä aukkoyöt (ale ${discountPct} %)`,
+      label: `A: fill gap nights (${discountPct}% off)`,
       analysis: analysisA,
       turnovers: countTurnovers(simA.reservations, args.from, args.to),
     },
     {
-      label: `B: min-stay ${minStay} yötä + hinnat +${upliftPct} %`,
+      label: `B: min stay ${minStay} nights + prices +${upliftPct}%`,
       analysis: analysisB,
       turnovers: countTurnovers(simB.reservations, args.from, args.to),
     },
   ];
 
   const dataNote =
-    `varaukset: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
+    `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
   return formatComparison(scenarios, args.from, args.to, costSource.label, dataNote);
 }
