@@ -3,7 +3,23 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>night-margin — net per available night</title>
+<title>night-margin — what your nights actually earn</title>
+<meta name="description" content="night-margin shows what your short-term rental calendar hides: net profit per available night, occupancy, and the bookings that lose money after turnover costs.">
+<meta property="og:title" content="night-margin — what your nights actually earn">
+<meta property="og:description" content="See what your nights actually earn — net € per available night, the gap nights, and the bookings that leak money after cleaning and turnover costs.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mikki321.github.io/night-margin-mcp/">
+<meta property="og:image" content="https://mikki321.github.io/night-margin-mcp/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="night-margin — what your nights actually earn">
+<meta name="twitter:description" content="Net € per available night, gap nights, and the bookings that leak money after turnover costs.">
+<meta name="twitter:image" content="https://mikki321.github.io/night-margin-mcp/og-image.png">
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#f9f9f7">
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0d0d0d">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%230d366b'/%3E%3Ctext x='32' y='44' font-size='36' font-family='system-ui,sans-serif' font-weight='700' fill='%23ffffff' text-anchor='middle'%3E%E2%82%AC%3C/text%3E%3C/svg%3E">
+<script>try { var t = localStorage.getItem("nm-theme"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t; } catch (e) {}</script>
 <style>
   :root {
     color-scheme: light;
@@ -25,42 +41,94 @@
       --neg-1: #5c2a2a; --neg-2: #e66767;
     }
   }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page: #0d0d0d; --surface: #1a1a19;
+    --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+    --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+    --mid: #383835;
+    --crit: #d03b3b; --good-text: #0ca30c;
+    --neg-1: #5c2a2a; --neg-2: #e66767;
+  }
   * { box-sizing: border-box; margin: 0; }
   body {
     background: var(--page); color: var(--ink);
     font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
-    padding: 28px clamp(16px, 4vw, 48px) 64px;
+    padding: 24px clamp(16px, 4vw, 48px) 64px;
+    max-width: 1280px; margin: 0 auto;
   }
-  header h1 { font-size: 20px; font-weight: 650; }
-  header .sub { color: var(--ink-2); margin-top: 4px; font-size: 13px; }
-  header .sub .sep { color: var(--muted); margin: 0 6px; }
 
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0 28px; }
+  .brand-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .brand { font-size: 15px; font-weight: 650; letter-spacing: 0.01em; }
+  #themeBtn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 8px; width: 34px; height: 34px; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+  #themeBtn:hover { color: var(--ink); background: var(--mid); }
+  #themeBtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+  .hero { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 56px; }
+  .hero-value { font-size: clamp(44px, 9vw, 56px); font-weight: 650; line-height: 1; letter-spacing: -0.015em; }
+  .hero-unit { font-size: 15px; color: var(--ink-2); font-weight: 500; }
+  .tagline { margin-top: 8px; font-size: 14px; color: var(--ink-2); max-width: 60ch; }
+  .sub { color: var(--muted); margin-top: 6px; font-size: 12.5px; }
+  .sub .sep { margin: 0 6px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 20px 0 30px; }
   .tile {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
     padding: 14px 16px;
   }
   .tile .label { font-size: 12px; color: var(--ink-2); }
   .tile .value { font-size: 26px; font-weight: 650; margin-top: 2px; }
-  .tile.hero .value { font-size: 34px; }
   .tile .note { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .tile .leak { color: var(--crit); }
+  .tile .ok { color: var(--good-text); }
 
-  section h2 { font-size: 14px; font-weight: 650; margin: 26px 0 4px; }
-  section .desc { font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; }
+  .shead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 28px 0 4px; }
+  .shead h2 { font-size: 14px; font-weight: 650; }
+  section .desc { font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; max-width: 78ch; }
+
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 2px; gap: 2px; }
+  .seg[hidden] { display: none; }
+  .seg button {
+    border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px;
+    padding: 5px 11px; min-height: 28px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .seg button[aria-pressed="true"] { background: var(--mid); color: var(--ink); font-weight: 600; }
+  .seg button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
   .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
   .cell {
     border-radius: 8px; padding: 10px 11px 9px; min-height: 74px;
-    border: 1px solid var(--border); cursor: default; position: relative;
+    border: 1px solid var(--border); cursor: pointer; position: relative;
+    -webkit-tap-highlight-color: transparent;
   }
+  @media (hover: hover) { .cell:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.14); } }
+  .cell:focus-visible, .cell.sel { outline: none; box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--ink); }
   .cell .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cell .net { font-size: 17px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
   .cell .occ { height: 3px; border-radius: 2px; background: color-mix(in oklab, currentColor 22%, transparent); margin-top: 8px; overflow: hidden; }
   .cell .occ i { display: block; height: 100%; background: currentColor; }
 
+  #detail { margin-top: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  #detail[hidden] { display: none; }
+  .dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .dhead b { font-size: 13.5px; }
+  .dclose {
+    border: 0; background: transparent; color: var(--ink-2); font-size: 18px; line-height: 1;
+    cursor: pointer; padding: 0; width: 32px; height: 32px; border-radius: 6px; flex: none;
+  }
+  .dclose:hover { background: var(--mid); color: var(--ink); }
+  .dclose:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .dgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px 16px; }
+  .dgrid .dl { font-size: 11.5px; color: var(--ink-2); }
+  .dgrid .dv { font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
   .legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
   .legend .sw { width: 22px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+  .legend .end { font-weight: 600; color: var(--ink-2); }
 
   table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13.5px; }
   th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); }
@@ -69,10 +137,13 @@
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--crit); }
   .neg { color: var(--crit); font-weight: 600; }
+  .tablewrap { overflow-x: auto; }
+  #triage tr[data-pid] { cursor: pointer; }
+  @media (hover: hover) { #triage tr[data-pid]:hover td { background: var(--mid); } }
 
   details { margin-top: 14px; }
   summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
-  details table { margin-top: 10px; }
+  details .tablewrap { margin-top: 10px; }
 
   #tip {
     position: fixed; pointer-events: none; z-index: 10; display: none;
@@ -81,44 +152,128 @@
     max-width: 260px;
   }
   #tip b { display: block; margin-bottom: 3px; }
-  #tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
+  #tip .row, .dets .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
   #tip .row span:last-child { font-variant-numeric: tabular-nums; color: var(--ink); }
-  footer a { color: inherit; } footer { margin-top: 34px; font-size: 12px; color: var(--muted); }
+
+  .skel { display: inline-block; background: var(--mid); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+
+  .errcard {
+    grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 22px 20px; text-align: center;
+  }
+  .errcard b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .errcard .msg { color: var(--crit); font-size: 13px; }
+  .errcard .hint { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
+  .errcard code { background: var(--mid); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+
+  footer { margin-top: 40px; font-size: 12px; color: var(--muted); }
+  footer a { color: inherit; }
+  .install { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .install .try { color: var(--ink-2); font-weight: 600; }
+  .install code {
+    background: var(--mid); border: 1px solid var(--border); border-radius: 6px; padding: 6px 9px;
+    font: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ink-2);
+    white-space: nowrap; overflow-x: auto; max-width: 100%;
+  }
+  #copyBtn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 6px; font: inherit; font-size: 12px; font-weight: 600;
+    padding: 6px 11px; min-height: 32px; cursor: pointer;
+  }
+  #copyBtn:hover { background: var(--mid); color: var(--ink); }
+  #copyBtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
   .empty { color: var(--ink-2); font-size: 13.5px; padding: 14px 0; }
 </style>
 </head>
 <body>
 <header>
-  <h1>night-margin — net per available night</h1>
-  <div class="sub" id="meta">Loading data.json…</div>
+  <div class="brand-row">
+    <div class="brand">night-margin</div>
+    <button id="themeBtn" type="button" aria-label="Toggle light / dark theme" title="Toggle light / dark theme">
+      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75 A6.25 6.25 0 0 1 8 14.25 Z" fill="currentColor"/></svg>
+    </button>
+  </div>
+  <div class="hero" id="hero"><span class="skel" style="width:200px;height:52px;border-radius:10px"></span></div>
+  <p class="tagline">What your calendar hides: the profit left after every turnover cost.</p>
+  <div class="sub" id="meta"><span class="skel" style="width:min(420px,80%);height:13px"></span></div>
 </header>
 
-<div class="kpis" id="kpis"></div>
+<div class="kpis" id="kpis">
+  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
+  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
+  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
+</div>
 
-<section>
-  <h2>Property heatmap</h2>
-  <div class="desc">Color = net € per available night (red below zero · gray near zero · deeper blue is better). Thin bar = occupancy. Hover a tile for details.</div>
-  <div class="map" id="map"></div>
+<section id="mapSec">
+  <div class="shead">
+    <h2 id="mapTitle">Property heatmap</h2>
+    <div class="seg" role="group" aria-label="Sort heatmap tiles" id="sortSeg" hidden>
+      <button type="button" data-sort="net" aria-pressed="true">Net/night</button>
+      <button type="button" data-sort="occ" aria-pressed="false">Occupancy</button>
+      <button type="button" data-sort="name" aria-pressed="false">Name</button>
+    </div>
+  </div>
+  <div class="desc">Color = net € per available night — red is a loss, gray near zero, deeper blue is better. Thin bar = occupancy. Tap or hover a tile for details.</div>
+  <div class="map" id="map" role="group" aria-labelledby="mapTitle">
+    <div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div>
+  </div>
+  <div id="detail" hidden></div>
   <div class="legend" id="legend"></div>
   <details>
     <summary>Table view</summary>
-    <table id="ptable"></table>
+    <div class="tablewrap"><table id="ptable"></table></div>
   </details>
 </section>
 
-<section>
-  <h2>Triage — net-negative bookings</h2>
-  <div class="desc">Bookings whose gross does not cover their own turnover cost. Each one is money lost while the calendar looks “full”.</div>
+<section id="triSec">
+  <h2 style="font-size:14px;font-weight:650;margin:28px 0 4px">Triage — net-negative bookings</h2>
+  <div class="desc">Bookings whose gross does not cover their own turnover cost. Each one is money lost while the calendar looks “full”. Tap a row to locate the property on the map.</div>
   <div id="triage"></div>
 </section>
 
-<footer id="foot"></footer>
-<div id="tip"></div>
+<footer>
+  <div class="install">
+    <span class="try">Run it on your data:</span>
+    <code id="cmd">claude mcp add margin -- npx -y night-margin-mcp</code>
+    <button id="copyBtn" type="button">Copy</button>
+  </div>
+  <div id="foot"><a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a></div>
+</footer>
+<div id="tip" role="presentation"></div>
 
 <script>
 const eur = n => (n < 0 ? "-€" : "€") + Math.abs(Math.round(n)).toLocaleString("en-US");
 const eur1 = n => (n < 0 ? "-€" : "€") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 1 });
 const pct = n => n.toLocaleString("en-US", { maximumFractionDigits: 1 }) + "%";
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const canHover = matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+/* Theme toggle: explicit choice wins over the OS preference. */
+document.getElementById("themeBtn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("nm-theme", root.dataset.theme); } catch (e) {}
+});
+
+/* Copy install command. */
+const copyBtn = document.getElementById("copyBtn");
+copyBtn.addEventListener("click", async () => {
+  const cmd = document.getElementById("cmd").textContent;
+  let ok = false;
+  try { await navigator.clipboard.writeText(cmd); ok = true; } catch (e) {
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = cmd; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      ok = document.execCommand("copy"); ta.remove();
+    } catch (e2) { ok = false; }
+  }
+  copyBtn.textContent = ok ? "Copied ✓" : "Select & copy above";
+  setTimeout(() => { copyBtn.textContent = "Copy"; }, 1800);
+});
 
 /* Sequential blue steps (validated reference ramp) for the positive arm. */
 const BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
@@ -144,58 +299,134 @@ function showTip(e, html) {
 }
 function hideTip() { tip.style.display = "none"; }
 
-fetch("data.json").then(r => {
-  if (!r.ok) throw new Error("data.json not found — run: npm run demo:web");
+/* Tap-to-open detail panel (shared with keyboard Enter/Space). */
+const detail = document.getElementById("detail");
+let selectedEl = null;
+function closeDetail() {
+  if (selectedEl) { selectedEl.classList.remove("sel"); selectedEl.setAttribute("aria-pressed", "false"); }
+  selectedEl = null;
+  detail.hidden = true;
+}
+function openDetail(p, el) {
+  if (selectedEl === el) { closeDetail(); return; }
+  closeDetail();
+  selectedEl = el;
+  el.classList.add("sel");
+  el.setAttribute("aria-pressed", "true");
+  const rows = [
+    ["Net / available night", eur1(p.net_per_available_night)],
+    ["Occupancy", pct(p.occ)],
+    ["Booked nights", p.booked_nights],
+    ["Gap nights", p.gap_nights],
+    ["Gross", eur(p.gross)],
+    ["Turnover costs", eur(p.costs)],
+    ["Net", eur(p.net)],
+  ];
+  detail.innerHTML = `<div class="dhead"><b>${esc(p.property_id)}</b>
+      <button class="dclose" type="button" aria-label="Close details">×</button></div>
+    <div class="dgrid">` +
+    rows.map(([l, v]) => `<div><div class="dl">${l}</div><div class="dv">${v}</div></div>`).join("") +
+    `</div>`;
+  detail.querySelector(".dclose").addEventListener("click", closeDetail);
+  detail.hidden = false;
+}
+document.addEventListener("click", e => {
+  if (!e.target.closest("[data-pid]") && !e.target.closest("#detail")) closeDetail();
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
+
+fetch("data.json", { cache: "no-cache" }).then(r => {
+  if (!r.ok) throw new Error("data.json not found");
   return r.json();
 }).then(d => {
   const a = d.analysis, t = a.totals;
-  document.getElementById("meta").innerHTML =
-    `${d.window.from} → ${d.window.to}<span class="sep">·</span>${d.sources.reservations}` +
-    `<span class="sep">·</span>${d.sources.costs}` +
-    (d.sources.attribution ? `<span class="sep">·</span>${d.sources.attribution}` : "");
 
-  document.getElementById("kpis").innerHTML = `
-    <div class="tile hero"><div class="label">Net per available night</div>
-      <div class="value">${eur1(t.net_per_available_night)}</div>
-      <div class="note">${a.properties.length} properties with bookings</div></div>
-    <div class="tile"><div class="label">Occupancy</div><div class="value">${pct(t.occupancy_pct)}</div>
+  document.getElementById("hero").innerHTML =
+    `<span class="hero-value">${eur1(t.net_per_available_night)}</span>
+     <span class="hero-unit">net per available night, ${a.properties.length} properties</span>`;
+
+  document.getElementById("meta").innerHTML =
+    `${esc(d.window.from)} → ${esc(d.window.to)}<span class="sep">·</span>${esc(d.sources.reservations)}` +
+    `<span class="sep">·</span>${esc(d.sources.costs)}` +
+    (d.sources.attribution ? `<span class="sep">·</span>${esc(d.sources.attribution)}` : "");
+
+  const leakTile = a.leak_eur > 0
+    ? `<div class="tile"><div class="label">Leak</div><div class="value leak">${eur(a.leak_eur)}</div>
+        <div class="note">${pct(a.leak_pct)} of booked nights · ${a.negative_reservations.length} booking${a.negative_reservations.length === 1 ? "" : "s"}</div></div>`
+    : `<div class="tile"><div class="label">Leak</div><div class="value ok">€0</div>
+        <div class="note">no net-negative bookings</div></div>`;
+  const otherTiles =
+    `<div class="tile"><div class="label">Occupancy</div><div class="value">${pct(t.occupancy_pct)}</div>
       <div class="note">${t.booked_nights} booked · ${t.gap_nights} gap nights</div></div>
     <div class="tile"><div class="label">Gross → Net</div><div class="value">${eur(t.net)}</div>
-      <div class="note">${eur(t.gross)} − ${eur(t.costs)} turnover costs</div></div>
-    <div class="tile"><div class="label">Leak</div><div class="value leak">${eur(a.leak_eur)}</div>
-      <div class="note">${pct(a.leak_pct)} of booked nights · ${a.negative_reservations.length} bookings</div></div>`;
+      <div class="note">${eur(t.gross)} − ${eur(t.costs)} turnover costs</div></div>`;
+  document.getElementById("kpis").innerHTML = a.leak_eur > 0 ? leakTile + otherTiles : otherTiles + leakTile;
 
   const max = Math.max(...a.properties.map(p => p.net_per_available_night), 1);
   const map = document.getElementById("map");
+  map.innerHTML = "";
+  const cells = [];
   for (const p of a.properties) {
+    p.occ = p.available_nights ? (p.booked_nights / p.available_nights) * 100 : 0;
     const c = cellColor(p.net_per_available_night, max);
-    const occ = p.available_nights ? (p.booked_nights / p.available_nights) * 100 : 0;
     const el = document.createElement("div");
     el.className = "cell";
+    el.setAttribute("role", "button");
+    el.setAttribute("tabindex", "0");
+    el.setAttribute("aria-pressed", "false");
+    el.setAttribute("aria-label", `${p.property_id}: ${eur1(p.net_per_available_night)} net per available night, ${pct(p.occ)} occupancy. Press Enter for details.`);
+    el.dataset.pid = p.property_id;
     el.style.background = c.bg; el.style.color = c.ink;
-    el.innerHTML = `<div class="name">${p.property_id}</div>
+    el.innerHTML = `<div class="name">${esc(p.property_id)}</div>
       <div class="net">${eur1(p.net_per_available_night)}<span style="font-size:11px;font-weight:500">/night</span></div>
-      <div class="occ"><i style="width:${occ}%"></i></div>`;
-    el.addEventListener("mousemove", e => showTip(e, `<b>${p.property_id}</b>
-      <div class="row"><span>Net / available night</span><span>${eur1(p.net_per_available_night)}</span></div>
-      <div class="row"><span>Booked / gap nights</span><span>${p.booked_nights} / ${p.gap_nights}</span></div>
-      <div class="row"><span>Occupancy</span><span>${pct(occ)}</span></div>
-      <div class="row"><span>Gross</span><span>${eur(p.gross)}</span></div>
-      <div class="row"><span>Turnover costs</span><span>${eur(p.costs)}</span></div>
-      <div class="row"><span>Net</span><span>${eur(p.net)}</span></div>`));
-    el.addEventListener("mouseleave", hideTip);
+      <div class="occ"><i style="width:${p.occ}%"></i></div>`;
+    if (canHover) {
+      el.addEventListener("mousemove", e => showTip(e, `<b>${esc(p.property_id)}</b>
+        <div class="row"><span>Net / available night</span><span>${eur1(p.net_per_available_night)}</span></div>
+        <div class="row"><span>Booked / gap nights</span><span>${p.booked_nights} / ${p.gap_nights}</span></div>
+        <div class="row"><span>Occupancy</span><span>${pct(p.occ)}</span></div>
+        <div class="row"><span>Gross</span><span>${eur(p.gross)}</span></div>
+        <div class="row"><span>Turnover costs</span><span>${eur(p.costs)}</span></div>
+        <div class="row"><span>Net</span><span>${eur(p.net)}</span></div>`));
+      el.addEventListener("mouseleave", hideTip);
+    }
+    el.addEventListener("click", () => { hideTip(); openDetail(p, el); });
+    el.addEventListener("keydown", e => {
+      if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDetail(p, el); }
+    });
+    cells.push({ p, el });
     map.appendChild(el);
   }
 
+  /* Sort segmented control. */
+  const seg = document.getElementById("sortSeg");
+  seg.hidden = false;
+  const SORTS = {
+    net: (x, y) => x.p.net_per_available_night - y.p.net_per_available_night, // worst first — the story
+    occ: (x, y) => x.p.occ - y.p.occ,
+    name: (x, y) => String(x.p.property_id).localeCompare(String(y.p.property_id)),
+  };
+  function applySort(key) {
+    cells.sort(SORTS[key]);
+    for (const c of cells) map.appendChild(c.el);
+  }
+  seg.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-sort]");
+    if (!btn) return;
+    for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === btn));
+    applySort(btn.dataset.sort);
+  });
+  applySort("net");
+
   const lg = document.getElementById("legend");
-  lg.innerHTML = `<span>-€/night</span><span class="sw" style="background:var(--neg-2)"></span>
-    <span class="sw" style="background:var(--mid)"></span>` +
+  lg.innerHTML = `<span class="end">loss</span><span class="sw" style="background:var(--neg-2)"></span>
+    <span class="sw" style="background:var(--mid)" title="≈ €0"></span>` +
     BLUES.map(b => `<span class="sw" style="background:${b}"></span>`).join("") +
-    `<span>${eur1(max)}/night</span>`;
+    `<span style="white-space:nowrap"><span class="end">best</span> · ${eur1(max)}/night</span>`;
 
   document.getElementById("ptable").innerHTML =
     `<tr><th>Property</th><th class="num">Net/night</th><th class="num">Booked</th><th class="num">Gap</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
-    a.properties.map(p => `<tr><td>${p.property_id}</td><td class="num">${eur1(p.net_per_available_night)}</td>
+    a.properties.map(p => `<tr><td>${esc(p.property_id)}</td><td class="num">${eur1(p.net_per_available_night)}</td>
       <td class="num">${p.booked_nights}</td><td class="num">${p.gap_nights}</td>
       <td class="num">${eur(p.gross)}</td><td class="num">${eur(p.costs)}</td><td class="num">${eur(p.net)}</td></tr>`).join("");
 
@@ -203,23 +434,38 @@ fetch("data.json").then(r => {
   if (a.negative_reservations.length === 0) {
     tri.innerHTML = `<div class="empty">No net-negative bookings in this window — nothing leaking.</div>`;
   } else {
-    tri.innerHTML = `<table>
-      <tr><th></th><th>Booking</th><th>Property</th><th>Check-in</th><th class="num">Nights</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
-      a.negative_reservations.slice(0, 15).map(r => `<tr>
+    tri.innerHTML = `<div class="tablewrap"><table>
+      <tr><th></th><th>Property</th><th class="num">Net</th><th>Check-in</th><th class="num">Nights</th><th class="num">Gross</th><th class="num">Costs</th><th>Booking</th></tr>` +
+      a.negative_reservations.slice(0, 15).map(r => `<tr data-pid="${esc(r.property_id)}" title="Show ${esc(r.property_id)} on the map">
         <td><span class="chip">⚠ leak</span></td>
-        <td>${r.reservation_id}</td><td>${r.property_id}</td><td>${r.checkin}</td>
+        <td>${esc(r.property_id)}</td><td class="num neg">${eur(r.net)}</td><td>${esc(r.checkin)}</td>
         <td class="num">${r.nights}</td><td class="num">${eur(r.gross)}</td>
-        <td class="num">${eur(r.costs)}</td><td class="num neg">${eur(r.net)}</td></tr>`).join("") +
+        <td class="num">${eur(r.costs)}</td><td>${esc(r.reservation_id)}</td></tr>`).join("") +
       (a.negative_reservations.length > 15
         ? `<tr><td colspan="8" style="color:var(--ink-2)">…and ${a.negative_reservations.length - 15} more net-negative bookings — open the table view or ask the MCP server.</td></tr>`
         : "") +
-      `</table>`;
+      `</table></div>`;
+    tri.addEventListener("click", e => {
+      const row = e.target.closest("tr[data-pid]");
+      if (!row) return;
+      const hit = cells.find(c => c.p.property_id === row.dataset.pid);
+      if (!hit) return;
+      openDetail(hit.p, hit.el);
+      hit.el.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
   }
 
   document.getElementById("foot").innerHTML =
-    `Generated ${d.generated_at} · synthetic demo data — bring your own with the MCP server · <a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a>`;
+    `Generated ${esc(d.generated_at)} · <a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a>`;
 }).catch(err => {
-  document.getElementById("meta").textContent = err.message;
+  document.getElementById("hero").style.display = "none";
+  document.getElementById("meta").textContent = "";
+  document.getElementById("mapSec").style.display = "none";
+  document.getElementById("triSec").style.display = "none";
+  document.getElementById("kpis").innerHTML =
+    `<div class="errcard"><b>Couldn’t load the analysis</b>
+      <div class="msg">${esc(err.message)}</div>
+      <div class="hint">Generate <code>data.json</code> next to this page with <code>npm run demo:web</code>, then reload.</div></div>`;
 });
 </script>
 </body>
