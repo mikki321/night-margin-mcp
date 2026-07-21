@@ -1,6 +1,6 @@
 import type { Reservation } from "../core/types.js";
 import type { ReservationSource } from "../sources/reservationSource.js";
-import type { WheelhouseClient, WhListing } from "./client.js";
+import { WheelhouseHttpError, type WheelhouseClient, type WhListing } from "./client.js";
 
 /**
  * TYÖSÄÄNTÖ 1 TÄYTTYY (ks. TEAM.md + Päätösloki P2): tämä parseri on
@@ -166,21 +166,38 @@ export function wheelhouseReservations(
 ): ReservationSource {
   const channel = opts.channel?.trim() || DEFAULT_WHEELHOUSE_CHANNEL;
   const parse = opts.parse ?? parseReservations;
-  return {
+  const source: ReservationSource = {
     label: "Wheelhouse RM API (live)",
     async getReservations(from, to) {
       const listings = (await client.listListings()).filter((l) => l.is_active !== false);
       const all: Reservation[] = [];
+      let skipped = 0;
       // sarjassa — ei fan-outia
       for (const listing of listings) {
         const propertyId = listingFromDocumented(listing);
-        const raw = await client.listReservationsRaw(listing.id, channel);
+        let raw: unknown;
+        try {
+          raw = await client.listReservationsRaw(listing.id, channel);
+        } catch (e) {
+          // Yksittäinen kanavalta puuttuva listaus (esim. WH-natiivi ilman
+          // PMS-vastinetta) ei saa kaataa koko portfolion analyysiä.
+          if (e instanceof WheelhouseHttpError && e.status === 404) {
+            skipped++;
+            continue;
+          }
+          throw e;
+        }
         for (const r of parse(raw)) {
           all.push({ ...r, property_id: propertyId });
         }
       }
+      source.label =
+        skipped > 0
+          ? `Wheelhouse RM API (live) — ${skipped} listing${skipped === 1 ? "" : "s"} skipped (not found on channel "${channel}")`
+          : "Wheelhouse RM API (live)";
       // jaksoleikkaus [from, to): mukaan varaukset jotka leikkaavat ikkunaa
       return all.filter((r) => r.checkin < to && r.checkout > from);
     },
   };
+  return source;
 }

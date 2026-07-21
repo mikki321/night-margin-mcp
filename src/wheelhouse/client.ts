@@ -5,7 +5,10 @@
 
 const DEFAULT_BASE_URL = "https://api.usewheelhouse.com/ss_api/v1";
 const CACHE_TTL_MS = 10 * 60_000;
-const BACKOFF_MS = [2_000, 4_000, 8_000];
+// 429-palautumisen viimeinen porras ylittää koko 60 s -ikkunan → limiitti nollautuu varmasti.
+const BACKOFF_MS = [2_000, 5_000, 15_000, 31_000, 61_000];
+// Ennakoiva tahdistus ~54 req/min: iso portfolio (esim. 73 kohdetta) ei osu limiittiin lainkaan.
+const MIN_INTERVAL_MS = 1_100;
 
 /** Dokumentoidut listing-kentät; muut jätetään huomiotta. */
 export interface WhListing {
@@ -37,12 +40,24 @@ type SleepLike = (ms: number) => Promise<void>;
 
 const realSleep: SleepLike = (ms) => new Promise((r) => setTimeout(r, ms));
 
+/** HTTP-virhe statuskoodilla — adapteri voi esim. ohittaa yksittäisen 404-listauksen. */
+export class WheelhouseHttpError extends Error {
+  constructor(
+    message: string,
+    public readonly status: number,
+  ) {
+    super(message);
+    this.name = "WheelhouseHttpError";
+  }
+}
+
 export class WheelhouseClient {
   private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly fetchImpl: FetchLike;
   private readonly sleep: SleepLike;
   private readonly cache = new Map<string, { at: number; body: unknown }>();
+  private lastRequestAt = 0;
 
   constructor(opts: { apiKey: string; baseUrl?: string; fetchImpl?: FetchLike; sleepImpl?: SleepLike }) {
     this.apiKey = opts.apiKey;
@@ -58,6 +73,10 @@ export class WheelhouseClient {
     if (cached && Date.now() - cached.at < CACHE_TTL_MS) return cached.body;
 
     for (let attempt = 0; ; attempt++) {
+      const throttle = this.lastRequestAt + MIN_INTERVAL_MS - Date.now();
+      if (throttle > 0) await this.sleep(throttle);
+      this.lastRequestAt = Date.now();
+
       let res: Awaited<ReturnType<FetchLike>>;
       try {
         res = await this.fetchImpl(url, { headers: { "X-Integration-Api-Key": this.apiKey } });
@@ -73,10 +92,13 @@ export class WheelhouseClient {
         continue;
       }
       if (res.status === 401 || res.status === 403) {
-        throw new Error(`Wheelhouse rejected the API key (HTTP ${res.status}) — check WHEELHOUSE_API_KEY`);
+        throw new WheelhouseHttpError(
+          `Wheelhouse rejected the API key (HTTP ${res.status}) — check WHEELHOUSE_API_KEY`,
+          res.status,
+        );
       }
       if (!res.ok) {
-        throw new Error(`Wheelhouse returned HTTP ${res.status} (${url})`);
+        throw new WheelhouseHttpError(`Wheelhouse returned HTTP ${res.status} (${url})`, res.status);
       }
 
       const body = await res.json();
