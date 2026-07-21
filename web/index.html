@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>night-margin — net per available night</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7; --surface: #fcfcfb;
+    --ink: #0b0b0b; --ink-2: #52514e; --muted: #898781;
+    --grid: #e1e0d9; --border: rgba(11,11,11,0.10);
+    --mid: #f0efec;
+    --crit: #d03b3b; --good-text: #006300;
+    --neg-1: #f6c9c8; --neg-2: #e34948;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) {
+      color-scheme: dark;
+      --page: #0d0d0d; --surface: #1a1a19;
+      --ink: #ffffff; --ink-2: #c3c2b7; --muted: #898781;
+      --grid: #2c2c2a; --border: rgba(255,255,255,0.10);
+      --mid: #383835;
+      --crit: #d03b3b; --good-text: #0ca30c;
+      --neg-1: #5c2a2a; --neg-2: #e66767;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: var(--page); color: var(--ink);
+    font: 15px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: 28px clamp(16px, 4vw, 48px) 64px;
+  }
+  header h1 { font-size: 20px; font-weight: 650; }
+  header .sub { color: var(--ink-2); margin-top: 4px; font-size: 13px; }
+  header .sub .sep { color: var(--muted); margin: 0 6px; }
+
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin: 22px 0 28px; }
+  .tile {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .tile .label { font-size: 12px; color: var(--ink-2); }
+  .tile .value { font-size: 26px; font-weight: 650; margin-top: 2px; }
+  .tile.hero .value { font-size: 34px; }
+  .tile .note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tile .leak { color: var(--crit); }
+
+  section h2 { font-size: 14px; font-weight: 650; margin: 26px 0 4px; }
+  section .desc { font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; }
+
+  .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
+  .cell {
+    border-radius: 8px; padding: 10px 11px 9px; min-height: 74px;
+    border: 1px solid var(--border); cursor: default; position: relative;
+  }
+  .cell .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cell .net { font-size: 17px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
+  .cell .occ { height: 3px; border-radius: 2px; background: color-mix(in oklab, currentColor 22%, transparent); margin-top: 8px; overflow: hidden; }
+  .cell .occ i { display: block; height: 100%; background: currentColor; }
+
+  .legend { display: flex; align-items: center; gap: 6px; margin-top: 12px; font-size: 12px; color: var(--ink-2); flex-wrap: wrap; }
+  .legend .sw { width: 22px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
+
+  table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13.5px; }
+  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); }
+  th { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+  tr:last-child td { border-bottom: none; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--crit); }
+  .neg { color: var(--crit); font-weight: 600; }
+
+  details { margin-top: 14px; }
+  summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+  details table { margin-top: 10px; }
+
+  #tip {
+    position: fixed; pointer-events: none; z-index: 10; display: none;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+    border-radius: 8px; padding: 8px 11px; font-size: 12.5px; box-shadow: 0 4px 16px rgba(0,0,0,.18);
+    max-width: 260px;
+  }
+  #tip b { display: block; margin-bottom: 3px; }
+  #tip .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
+  #tip .row span:last-child { font-variant-numeric: tabular-nums; color: var(--ink); }
+  footer { margin-top: 34px; font-size: 12px; color: var(--muted); }
+  .empty { color: var(--ink-2); font-size: 13.5px; padding: 14px 0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>night-margin — net per available night</h1>
+  <div class="sub" id="meta">Loading data.json…</div>
+</header>
+
+<div class="kpis" id="kpis"></div>
+
+<section>
+  <h2>Property heatmap</h2>
+  <div class="desc">Color = net € per available night (red below zero · gray near zero · deeper blue is better). Thin bar = occupancy. Hover a tile for details.</div>
+  <div class="map" id="map"></div>
+  <div class="legend" id="legend"></div>
+  <details>
+    <summary>Table view</summary>
+    <table id="ptable"></table>
+  </details>
+</section>
+
+<section>
+  <h2>Triage — net-negative bookings</h2>
+  <div class="desc">Bookings whose gross does not cover their own turnover cost. Each one is money lost while the calendar looks “full”.</div>
+  <div id="triage"></div>
+</section>
+
+<footer id="foot"></footer>
+<div id="tip"></div>
+
+<script>
+const eur = n => (n < 0 ? "-€" : "€") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const eur1 = n => (n < 0 ? "-€" : "€") + Math.abs(n).toLocaleString("en-US", { maximumFractionDigits: 1 });
+const pct = n => n.toLocaleString("en-US", { maximumFractionDigits: 1 }) + "%";
+
+/* Sequential blue steps (validated reference ramp) for the positive arm. */
+const BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
+const WHITE_INK_FROM = 3; // index in BLUES from which white text is needed
+
+function cellColor(v, max) {
+  const mid = getComputedStyle(document.documentElement).getPropertyValue("--mid").trim();
+  if (v < -0.5) {
+    const deep = Math.abs(v) > max * 0.25;
+    return { bg: getComputedStyle(document.documentElement).getPropertyValue(deep ? "--neg-2" : "--neg-1").trim(), ink: deep ? "#fff" : "var(--ink)" };
+  }
+  if (v <= 0.5 || max <= 0) return { bg: mid, ink: "var(--ink)" };
+  const i = Math.min(BLUES.length - 1, Math.floor((v / max) * BLUES.length));
+  return { bg: BLUES[i], ink: i >= WHITE_INK_FROM ? "#fff" : "#0b0b0b" };
+}
+
+const tip = document.getElementById("tip");
+function showTip(e, html) {
+  tip.innerHTML = html; tip.style.display = "block";
+  const x = Math.min(e.clientX + 14, innerWidth - tip.offsetWidth - 12);
+  const y = Math.min(e.clientY + 14, innerHeight - tip.offsetHeight - 12);
+  tip.style.left = x + "px"; tip.style.top = y + "px";
+}
+function hideTip() { tip.style.display = "none"; }
+
+fetch("data.json").then(r => {
+  if (!r.ok) throw new Error("data.json not found — run: npm run demo:web");
+  return r.json();
+}).then(d => {
+  const a = d.analysis, t = a.totals;
+  document.getElementById("meta").innerHTML =
+    `${d.window.from} → ${d.window.to}<span class="sep">·</span>${d.sources.reservations}` +
+    `<span class="sep">·</span>${d.sources.costs}` +
+    (d.sources.attribution ? `<span class="sep">·</span>${d.sources.attribution}` : "");
+
+  document.getElementById("kpis").innerHTML = `
+    <div class="tile hero"><div class="label">Net per available night</div>
+      <div class="value">${eur1(t.net_per_available_night)}</div>
+      <div class="note">${a.properties.length} properties with bookings</div></div>
+    <div class="tile"><div class="label">Occupancy</div><div class="value">${pct(t.occupancy_pct)}</div>
+      <div class="note">${t.booked_nights} booked · ${t.gap_nights} gap nights</div></div>
+    <div class="tile"><div class="label">Gross → Net</div><div class="value">${eur(t.net)}</div>
+      <div class="note">${eur(t.gross)} − ${eur(t.costs)} turnover costs</div></div>
+    <div class="tile"><div class="label">Leak</div><div class="value leak">${eur(a.leak_eur)}</div>
+      <div class="note">${pct(a.leak_pct)} of booked nights · ${a.negative_reservations.length} bookings</div></div>`;
+
+  const max = Math.max(...a.properties.map(p => p.net_per_available_night), 1);
+  const map = document.getElementById("map");
+  for (const p of a.properties) {
+    const c = cellColor(p.net_per_available_night, max);
+    const occ = p.available_nights ? (p.booked_nights / p.available_nights) * 100 : 0;
+    const el = document.createElement("div");
+    el.className = "cell";
+    el.style.background = c.bg; el.style.color = c.ink;
+    el.innerHTML = `<div class="name">${p.property_id}</div>
+      <div class="net">${eur1(p.net_per_available_night)}<span style="font-size:11px;font-weight:500">/night</span></div>
+      <div class="occ"><i style="width:${occ}%"></i></div>`;
+    el.addEventListener("mousemove", e => showTip(e, `<b>${p.property_id}</b>
+      <div class="row"><span>Net / available night</span><span>${eur1(p.net_per_available_night)}</span></div>
+      <div class="row"><span>Booked / gap nights</span><span>${p.booked_nights} / ${p.gap_nights}</span></div>
+      <div class="row"><span>Occupancy</span><span>${pct(occ)}</span></div>
+      <div class="row"><span>Gross</span><span>${eur(p.gross)}</span></div>
+      <div class="row"><span>Turnover costs</span><span>${eur(p.costs)}</span></div>
+      <div class="row"><span>Net</span><span>${eur(p.net)}</span></div>`));
+    el.addEventListener("mouseleave", hideTip);
+    map.appendChild(el);
+  }
+
+  const lg = document.getElementById("legend");
+  lg.innerHTML = `<span>-€/night</span><span class="sw" style="background:var(--neg-2)"></span>
+    <span class="sw" style="background:var(--mid)"></span>` +
+    BLUES.map(b => `<span class="sw" style="background:${b}"></span>`).join("") +
+    `<span>${eur1(max)}/night</span>`;
+
+  document.getElementById("ptable").innerHTML =
+    `<tr><th>Property</th><th class="num">Net/night</th><th class="num">Booked</th><th class="num">Gap</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
+    a.properties.map(p => `<tr><td>${p.property_id}</td><td class="num">${eur1(p.net_per_available_night)}</td>
+      <td class="num">${p.booked_nights}</td><td class="num">${p.gap_nights}</td>
+      <td class="num">${eur(p.gross)}</td><td class="num">${eur(p.costs)}</td><td class="num">${eur(p.net)}</td></tr>`).join("");
+
+  const tri = document.getElementById("triage");
+  if (a.negative_reservations.length === 0) {
+    tri.innerHTML = `<div class="empty">No net-negative bookings in this window — nothing leaking.</div>`;
+  } else {
+    tri.innerHTML = `<table>
+      <tr><th></th><th>Booking</th><th>Property</th><th>Check-in</th><th class="num">Nights</th><th class="num">Gross</th><th class="num">Costs</th><th class="num">Net</th></tr>` +
+      a.negative_reservations.map(r => `<tr>
+        <td><span class="chip">⚠ leak</span></td>
+        <td>${r.reservation_id}</td><td>${r.property_id}</td><td>${r.checkin}</td>
+        <td class="num">${r.nights}</td><td class="num">${eur(r.gross)}</td>
+        <td class="num">${eur(r.costs)}</td><td class="num neg">${eur(r.net)}</td></tr>`).join("") +
+      `</table>`;
+  }
+
+  document.getElementById("foot").textContent =
+    `Generated ${d.generated_at} · local demo — data.json is generated on your machine and never committed. Regenerate: npm run demo:web`;
+}).catch(err => {
+  document.getElementById("meta").textContent = err.message;
+});
+</script>
+</body>
+</html>
