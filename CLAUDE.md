@@ -88,6 +88,7 @@ Rivit: `reservation_id, property_id, checkin, checkout, nights, gross_revenue, c
 
 ## Työskentelysäännöt
 
+0. **KIELISÄÄNTÖ (Miki 21.7.): kaikki käyttäjälle näkyvä ENGLANNIKSI** — tool-tulosteet, virheviestit, toolien descriptionit, zod-describet, README, package.json-description. Sisäiset työdokut (tämä tiedosto, TEAM.md, plan, commitit) saavat olla suomeksi. Tiimin roolit ja valtuudet: ks. TEAM.md.
 1. **Älä arvaa Wheelhouse-API:n kenttiä tai vastausmuotoja.** Pyydä Mikiä ajamaan curl ja liittämään vastaus; rakenna parseri todellisen vastauksen mukaan.
 2. Core pysyy puhtaana ja testattuna; adapterit ohuina.
 3. **Ei oikeaa asiakas- tai kohdedataa** repoon, testeihin tai READMEen — vain synteettistä tai Wheelhousen sample-dataa. Repo voi päätyä julkiseksi.

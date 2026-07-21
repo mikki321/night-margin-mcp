@@ -61,6 +61,22 @@ describe("csvSource", () => {
   it("kertoo toimintaohjeen kun tiedostoa ei ole", () => {
     expect(() => csvSource({ path: "/ei/ole/olemassa.csv" })).toThrow(/CSV_PATH/);
   });
+
+  it("getRows palauttaa rivit matchaus-kenttineen (property_id, checkin, checkout)", async () => {
+    const path = writeCsv(["r1,p1,2026-06-01,2026-06-03,2,200,55,12,18,2026-06-03,false"]);
+    const rows = await csvSource({ path }).getRows!();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      reservation_id: "r1",
+      property_id: "p1",
+      checkin: "2026-06-01",
+      checkout: "2026-06-03",
+      cleaning_cost: 55,
+      travel_cost: 12,
+      laundry_cost: 18,
+    });
+    expect(rows[0].confirmation_code).toBeUndefined();
+  });
 });
 
 describe("cleanhubSource", () => {
@@ -102,6 +118,46 @@ describe("cleanhubSource", () => {
       fetchImpl: async () => ({ ok: true, status: 200, json: async () => ({ rows: [] }) }),
     });
     await expect(src.getCosts([res("r1")])).rejects.toThrow(/JSON-taulukko/);
+  });
+
+  it("getRows hakee rivit annetulta aikaväliltä matchaus-kenttineen", async () => {
+    let seenUrl = "";
+    const src = cleanhubSource({
+      url: "https://ch.example.com",
+      token: "tok",
+      fetchImpl: async (url) => {
+        seenUrl = url;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => [
+            { ...row, property_id: "p1", checkin: "2026-06-01", checkout: "2026-06-03" },
+          ],
+        };
+      },
+    });
+    const rows = await src.getRows!("2026-06-01", "2026-06-30");
+    expect(seenUrl).toBe(
+      "https://ch.example.com/api/exports/turnover-costs?from=2026-06-01&to=2026-06-30",
+    );
+    expect(rows[0]).toMatchObject({
+      reservation_id: "r1",
+      property_id: "p1",
+      checkin: "2026-06-01",
+      checkout: "2026-06-03",
+      cleaning_cost: 62,
+      travel_cost: 14,
+      laundry_cost: 9,
+    });
+  });
+
+  it("getRows ilman aikaväliä kaatuu selkeällä ohjeella", async () => {
+    const src = cleanhubSource({
+      url: "https://ch.example.com",
+      token: "tok",
+      fetchImpl: async () => ({ ok: true, status: 200, json: async () => [] }),
+    });
+    await expect(src.getRows!()).rejects.toThrow(/getRows\(from, to\)/);
   });
 });
 

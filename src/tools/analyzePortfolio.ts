@@ -2,6 +2,7 @@ import { analyzePortfolio } from "../core/calc.js";
 import type { PortfolioAnalysis, PropertyStats } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
+import { avgFallbackFromEnv, resolveCosts } from "../sources/resolveCosts.js";
 
 const eur = (n: number): string => `${Math.round(n).toLocaleString("fi-FI")} €`;
 const eur2 = (n: number): string =>
@@ -72,7 +73,16 @@ export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
   const reservationSource = reservationSourceFromEnv(process.env);
 
   const reservations = await reservationSource.getReservations(args.from, args.to);
-  const costs = await costSource.getCosts(reservations);
+  const { costs, matchNote } = await resolveCosts(
+    costSource,
+    reservations,
+    args.from,
+    args.to,
+    avgFallbackFromEnv(process.env, args.avg_turnover_cost),
+  );
+
   const analysis = analyzePortfolio(reservations, costs, args.from, args.to);
-  return formatAnalysis(analysis, costSource.label, `varaukset: ${reservationSource.label}`);
+  const dataNote =
+    `varaukset: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
+  return formatAnalysis(analysis, costSource.label, dataNote);
 }

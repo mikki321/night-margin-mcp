@@ -17,36 +17,50 @@ function mulberry32(seed: number): () => number {
 
 const iso = (t: number): string => new Date(t).toISOString().slice(0, 10);
 
-const PROPERTIES = [
-  { id: "demo-1br-01", adr: 89 },
-  { id: "demo-1br-02", adr: 105 },
-  { id: "demo-1br-03", adr: 98 },
-  { id: "demo-2br-04", adr: 139 },
-  { id: "demo-2br-05", adr: 152 },
-  { id: "demo-2br-06", adr: 145 },
-  { id: "demo-3br-07", adr: 210 },
-  { id: "demo-3br-08", adr: 245 },
-];
+/**
+ * Kiinteä kalenteri: portfolio generoidaan AINA tälle välille ja leikataan
+ * pyydettyyn ikkunaan. Näin jokainen tool (analyze, compare, gap_night_check)
+ * näkee saman portfolion riippumatta omasta ikkunastaan — analyysin näyttämä
+ * aukko on aukko myös gap-checkin ikkunassa, ja CSV:n reservation_id:t
+ * osuvat samoihin varauksiin joka ikkunalla.
+ */
+const CAL_FROM = "2026-01-01";
+const CAL_TO = "2027-01-01";
 
 /**
- * Synteettinen mock-portfolio: 8 mökkiä, vaihtelevat oleskelupituudet,
- * osa lyhyistä last minute -varauksista hinnoiteltu niin halvalla että
- * netto painuu miinukselle → analyysillä on aina jotain näytettävää.
+ * maxGap ohjaa aukkoyövirtaa: halvat kohteet jäävät useammin tyhjilleen
+ * (aukkoja 0–maxGap yötä vaihtojen väliin), premium-kohteet ovat lähes
+ * täynnä. Näin "täytä aukot alennuksella" -strategian täytöt painottuvat
+ * kohteisiin joissa alennettu yö EI kata vaihtokustannusta — demon
+ * ydinjännite näkyy myös manual-tilan tasakustannuksella.
  */
-export function generateMockReservations(from: string, to: string): Reservation[] {
+const PROPERTIES = [
+  { id: "demo-1br-01", adr: 89, maxGap: 5 },
+  { id: "demo-1br-02", adr: 105, maxGap: 5 },
+  { id: "demo-1br-03", adr: 98, maxGap: 5 },
+  { id: "demo-2br-04", adr: 139, maxGap: 2 },
+  { id: "demo-2br-05", adr: 152, maxGap: 1 },
+  { id: "demo-2br-06", adr: 145, maxGap: 1 },
+  { id: "demo-3br-07", adr: 210, maxGap: 1 },
+  { id: "demo-3br-08", adr: 245, maxGap: 0 },
+];
+
+let calendarCache: Reservation[] | undefined;
+
+/** Koko kalenterivuoden deterministinen portfolio (generoidaan kerran). */
+function generateCalendar(): Reservation[] {
   const rnd = mulberry32(20260721);
-  const fromT = parseISODate(from);
-  const toT = parseISODate(to);
+  const calFromT = parseISODate(CAL_FROM);
+  const calToT = parseISODate(CAL_TO);
   const reservations: Reservation[] = [];
 
   for (const prop of PROPERTIES) {
-    // aloitetaan jakson alusta taaksepäin hieman, jotta reunan yli meneviä varauksia syntyy
-    let cursor = fromT - Math.floor(rnd() * 4) * MS_PER_DAY;
+    let cursor = calFromT;
     let n = 0;
-    while (cursor < toT) {
-      const gap = Math.floor(rnd() * 4); // 0–3 aukkoyötä
+    while (cursor < calToT) {
+      const gap = Math.floor(rnd() * (prop.maxGap + 1)); // 0–maxGap aukkoyötä
       cursor += gap * MS_PER_DAY;
-      if (cursor >= toT) break;
+      if (cursor >= calToT) break;
 
       const nights = 1 + Math.floor(rnd() * rnd() * 7); // 1–7 yötä, painottuu lyhyisiin
       const lastMinute = nights <= 2 && rnd() < 0.6; // aukkojen täyttö alennuksella
@@ -66,4 +80,18 @@ export function generateMockReservations(from: string, to: string): Reservation[
     }
   }
   return reservations;
+}
+
+/**
+ * Synteettinen mock-portfolio: 8 mökkiä, vaihtelevat oleskelupituudet,
+ * osa lyhyistä last minute -varauksista hinnoiteltu niin halvalla että
+ * netto painuu miinukselle → analyysillä on aina jotain näytettävää.
+ *
+ * Ikkunariippumaton: palauttaa kiinteän kalenterin varaukset leikattuna
+ * ikkunaan [from, to) — mukana myös varaus jonka checkout == from, koska
+ * analyysi kohdistaa sen vaihtokustannuksen jaksolle.
+ */
+export function generateMockReservations(from: string, to: string): Reservation[] {
+  calendarCache ??= generateCalendar();
+  return calendarCache.filter((r) => r.checkin < to && r.checkout >= from);
 }

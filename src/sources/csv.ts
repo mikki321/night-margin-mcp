@@ -1,13 +1,18 @@
 import { readFileSync } from "node:fs";
 import { parse } from "csv-parse/sync";
 import type { Reservation, TurnoverCost } from "../core/types.js";
-import type { CostSource } from "./costSource.js";
+import type { CostRow, CostSource } from "./costSource.js";
 
 interface CsvRow {
   reservation_id: string;
   cleaning_cost: string;
   travel_cost: string;
   laundry_cost: string;
+  /** matchCosts-kaskadin valinnaiset kentät — sample-CSV:ssä mukana */
+  property_id?: string;
+  checkin?: string;
+  checkout?: string;
+  confirmation_code?: string;
 }
 
 function num(row: CsvRow, field: keyof CsvRow, line: number): number {
@@ -39,17 +44,29 @@ export function csvSource(opts: { path: string; fallbackAvg?: number }): CostSou
   }
 
   const byId = new Map<string, TurnoverCost>();
+  const costRows: CostRow[] = [];
   rows.forEach((row, i) => {
-    byId.set(row.reservation_id, {
+    const cost: TurnoverCost = {
       reservation_id: row.reservation_id,
       cleaning_cost: num(row, "cleaning_cost", i + 2),
       travel_cost: num(row, "travel_cost", i + 2),
       laundry_cost: num(row, "laundry_cost", i + 2),
+    };
+    byId.set(row.reservation_id, cost);
+    costRows.push({
+      ...cost,
+      property_id: row.property_id || undefined,
+      checkin: row.checkin || undefined,
+      checkout: row.checkout || undefined,
+      confirmation_code: row.confirmation_code || undefined,
     });
   });
 
   return {
     label: `csv (${opts.path}, ${byId.size} riviä)`,
+    async getRows() {
+      return costRows;
+    },
     async getCosts(reservations: Reservation[]) {
       const map = new Map<string, TurnoverCost>();
       const missingIds: string[] = [];

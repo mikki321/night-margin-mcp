@@ -51,6 +51,10 @@ export function gapNightFloor(turnoverCost: number, travelCost: number, minMargi
  * - liikevaihto: suhteutettu jaksolle osuviin öihin (gross/nights × jakson yöt)
  * - vaihtokustannus: kohdistuu checkout-päivälle — mukana jos checkout ∈ [from, to)
  * - vuoto: varaukset joiden checkout ∈ [from, to) ja koko oleskelun netto < 0
+ *
+ * Oletus: yksi yksikkö per property_id. Päällekkäiset varaukset (moniyksikkö-
+ * kohde) SUMMAUTUVAT varattuihin öihin — käyttöaste voi silloin ylittää 100 %
+ * ja gap_nights leikkautuu nollaan. Sama oletus on core/simulate.ts:ssä.
  */
 export function analyzePortfolio(
   reservations: Reservation[],

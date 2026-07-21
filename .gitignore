@@ -9,3 +9,8 @@ secrets/
 
 *.log
 .DS_Store
+
+# sisäiset työdokut — eivät julkiseen repoon (committaa tietoisesti git add -f:llä jos halutaan)
+.claude/
+TEAM.md
+AGENT_COMMS.md
