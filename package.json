@@ -29,7 +29,8 @@
     "test": "vitest run",
     "prepare": "npm run build",
     "prepublishOnly": "npm run build && npm test",
-    "demo:web": "tsx scripts/generate-web-data.ts"
+    "demo:web": "tsx scripts/generate-web-data.ts",
+    "ui": "node scripts/ui-server.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

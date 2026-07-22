@@ -185,6 +185,101 @@
   #copyBtn:hover { background: var(--mid); color: var(--ink); }
   #copyBtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
   .empty { color: var(--ink-2); font-size: 13.5px; padding: 14px 0; }
+
+  /* ---- Local API mode (tabs · decisions · targets · alerts) ----
+     Same tokens as the rest of the page — no new colors. The one blue used
+     for progress fills is BLUES[4] from the existing sequential ramp. */
+  [hidden] { display: none !important; }
+  .tabs {
+    display: inline-flex; border: 1px solid var(--border); border-radius: 8px;
+    background: var(--surface); padding: 2px; gap: 2px; margin-top: 14px; max-width: 100%; overflow-x: auto;
+  }
+  .tabs button {
+    border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12.5px;
+    padding: 6px 13px; min-height: 32px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+  }
+  .tabs button[aria-selected="true"] { background: var(--mid); color: var(--ink); font-weight: 600; }
+  .tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  .btn {
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 6px; font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 6px 12px; min-height: 32px; cursor: pointer;
+  }
+  .btn:hover:not(:disabled) { background: var(--mid); color: var(--ink); }
+  .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .btn:disabled { opacity: .5; cursor: not-allowed; }
+  .btn.danger:not(:disabled) { color: var(--crit); border-color: color-mix(in oklab, var(--crit) 45%, transparent); }
+  .btn.danger:hover:not(:disabled) { background: color-mix(in oklab, var(--crit) 12%, transparent); color: var(--crit); }
+
+  .badge {
+    display: inline-flex; align-items: center; font-size: 11.5px; font-weight: 600;
+    border-radius: 999px; padding: 2px 9px; border: 1px solid var(--border);
+    color: var(--ink-2); background: var(--mid); white-space: nowrap;
+  }
+  .badge.applied {
+    color: var(--good-text);
+    background: color-mix(in oklab, var(--good-text) 12%, transparent);
+    border-color: color-mix(in oklab, var(--good-text) 30%, transparent);
+  }
+  .badge.reverted { color: var(--muted); background: transparent; }
+
+  .toolrow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .nowrap { white-space: nowrap; }
+  .hint { font-size: 12px; color: var(--muted); }
+  .errline { font-size: 12.5px; color: var(--crit); padding: 10px 0; }
+
+  .modal-back {
+    position: fixed; inset: 0; background: rgba(0,0,0,.45); z-index: 20;
+    display: flex; align-items: center; justify-content: center; padding: 16px;
+  }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    width: min(760px, 100%); max-height: min(84vh, 900px); display: flex; flex-direction: column;
+    box-shadow: 0 12px 40px rgba(0,0,0,.3);
+  }
+  .modal .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--grid); }
+  .modal .mhead b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal .mbody { padding: 12px 16px; overflow-y: auto; }
+  .modal pre {
+    background: var(--page); border: 1px solid var(--grid); border-radius: 8px; padding: 12px;
+    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
+    word-break: break-word; color: var(--ink-2); margin: 0;
+  }
+  .modal .mfoot { padding: 12px 16px; border-top: 1px solid var(--grid); display: flex; flex-direction: column; gap: 10px; }
+  .confirm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .confirm-row label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
+  .confirm-row input[type="checkbox"] { width: 16px; height: 16px; margin-top: 1px; accent-color: var(--crit); flex: none; }
+
+  .report {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 16px; font-size: 13px; line-height: 1.55; color: var(--ink-2);
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .report b { color: var(--ink); }
+
+  .props { display: flex; flex-wrap: wrap; gap: 8px; }
+  .pchip {
+    border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
+    border-radius: 999px; font: inherit; font-size: 12.5px; padding: 6px 13px; min-height: 32px; cursor: pointer;
+  }
+  .pchip:hover { background: var(--mid); color: var(--ink); }
+  .pchip[aria-pressed="true"] { background: var(--mid); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--ink); }
+  .pchip:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+
+  .months { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 14px; }
+  .mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .mcard .mlabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+  .mcard .trow { display: flex; gap: 8px; margin-top: 8px; }
+  .mcard input[type="number"] {
+    flex: 1; min-width: 0; border: 1px solid var(--border); background: var(--page); color: var(--ink);
+    border-radius: 6px; font: inherit; font-size: 13px; padding: 6px 9px;
+  }
+  .mcard input[type="number"]:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .progress { height: 6px; border-radius: 3px; background: var(--mid); overflow: hidden; margin-top: 10px; }
+  .progress i { display: block; height: 100%; background: #256abf; } /* BLUES[4] — existing ramp */
+  .pnote { font-size: 12px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
+  .snote { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -195,6 +290,12 @@
       <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.25" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M8 1.75 A6.25 6.25 0 0 1 8 14.25 Z" fill="currentColor"/></svg>
     </button>
   </div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Sections" hidden>
+    <button type="button" role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
+    <button type="button" role="tab" data-tab="dec" aria-selected="false">Decisions</button>
+    <button type="button" role="tab" data-tab="tgt" aria-selected="false">Targets</button>
+    <button type="button" role="tab" data-tab="alerts" aria-selected="false">Alerts</button>
+  </nav>
   <div class="hero" id="hero"><span class="skel" style="width:200px;height:52px;border-radius:10px"></span></div>
   <p class="tagline">What your calendar hides: the profit left after every turnover cost.</p>
   <div class="sub" id="meta"><span class="skel" style="width:min(420px,80%);height:13px"></span></div>
@@ -233,6 +334,39 @@
   <div id="triage"></div>
 </section>
 
+<section id="decSec" hidden>
+  <div class="shead">
+    <h2>Pricing decisions</h2>
+    <div class="toolrow">
+      <div class="seg" role="group" aria-label="Risk preset for proposals" id="riskSeg">
+        <button type="button" data-risk="conservative" aria-pressed="false" title="Conservative — doubles the minimum margin">CON</button>
+        <button type="button" data-risk="recommended" aria-pressed="true" title="Recommended — minimum margin as configured">REC</button>
+        <button type="button" data-risk="aggressive" aria-pressed="false" title="Aggressive — 40% of the minimum margin">AGG</button>
+      </div>
+      <button class="btn" id="proposeBtn" type="button">Propose now</button>
+    </div>
+  </div>
+  <div class="desc">Gap-night floor decisions from the local decision log. “Propose now” scans the next 30 days for gap nights priced below your cost floor (turnover + travel + minimum margin). Preview always shows the exact payload first — nothing is written without an explicit confirm.</div>
+  <div id="decNote" class="hint" style="margin-bottom:10px" hidden></div>
+  <div id="decBody"><div class="empty">Loading…</div></div>
+</section>
+
+<section id="tgtSec" hidden>
+  <div class="shead"><h2>Monthly gross targets</h2></div>
+  <div class="desc">Pick a property, set a gross revenue target per month, and track booked gross against it. Progress comes from the same reservation data as the dashboard, sliced per month.</div>
+  <div id="tgtBody"><div class="empty">Loading…</div></div>
+</section>
+
+<section id="alertSec" hidden>
+  <div class="shead">
+    <h2>Alerts</h2>
+    <button class="btn" id="alertBtn" type="button">Run check</button>
+  </div>
+  <div class="desc">Checks gap nights priced below your cost floor in the next 30 days, plus new bookings since the last check. Running it here never sends a notification — but it does record the bookings it sees as seen, so a scheduled check_alerts will not re-alert about them.</div>
+  <div id="alertChannel" class="hint"></div>
+  <div id="alertOut" style="margin-top:12px"></div>
+</section>
+
 <footer>
   <div class="install">
     <span class="try">Run it on your data:</span>
@@ -242,6 +376,14 @@
   <div id="foot"><a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a></div>
 </footer>
 <div id="tip" role="presentation"></div>
+<div class="modal-back" id="modalBack" role="dialog" aria-modal="true" aria-labelledby="modalTitle" hidden>
+  <div class="modal">
+    <div class="mhead"><b id="modalTitle"></b>
+      <button class="dclose" id="modalClose" type="button" aria-label="Close dialog">×</button></div>
+    <div class="mbody" id="modalBody"></div>
+    <div class="mfoot" id="modalFoot" hidden></div>
+  </div>
+</div>
 
 <script>
 const eur = n => (n < 0 ? "-€" : "€") + Math.abs(Math.round(n)).toLocaleString("en-US");
@@ -279,13 +421,18 @@ copyBtn.addEventListener("click", async () => {
 const BLUES = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"];
 const WHITE_INK_FROM = 3; // index in BLUES from which white text is needed
 
+/* Mid/loss cells reference the custom properties directly so a theme toggle
+   restyles them live — resolving them to a static hex here would bake the
+   old theme's color into the tile until a reload. The BLUES ramp stays a
+   fixed hex by design: it is theme-invariant. */
 function cellColor(v, max) {
-  const mid = getComputedStyle(document.documentElement).getPropertyValue("--mid").trim();
   if (v < -0.5) {
     const deep = Math.abs(v) > max * 0.25;
-    return { bg: getComputedStyle(document.documentElement).getPropertyValue(deep ? "--neg-2" : "--neg-1").trim(), ink: deep ? "#fff" : "var(--ink)" };
+    return deep
+      ? { bg: "var(--neg-2)", ink: "#fff" }
+      : { bg: "var(--neg-1)", ink: "var(--ink)" };
   }
-  if (v <= 0.5 || max <= 0) return { bg: mid, ink: "var(--ink)" };
+  if (v <= 0.5 || max <= 0) return { bg: "var(--mid)", ink: "var(--ink)" };
   const i = Math.min(BLUES.length - 1, Math.floor((v / max) * BLUES.length));
   return { bg: BLUES[i], ink: i >= WHITE_INK_FROM ? "#fff" : "#0b0b0b" };
 }
@@ -333,13 +480,31 @@ function openDetail(p, el) {
 document.addEventListener("click", e => {
   if (!e.target.closest("[data-pid]") && !e.target.closest("#detail") && !e.target.closest(".seg")) closeDetail();
 });
-document.addEventListener("keydown", e => { if (e.key === "Escape") closeDetail(); });
+document.addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  const mb = document.getElementById("modalBack");
+  if (mb && !mb.hidden) { closeModal(); return; }
+  closeDetail();
+});
 
-fetch("data.json", { cache: "no-cache" }).then(r => {
-  if (!r.ok) throw new Error("data.json not found");
+/* ---------- Data load: local API server when present, static data.json otherwise ---------- */
+const API = { on: false, health: null };
+let dashProps = null;
+
+async function fetchDashboard(url) {
+  const r = await fetch(url, { cache: "no-cache" });
+  if (!r.ok) {
+    if (url === "data.json") throw new Error("data.json not found");
+    let msg = "HTTP " + r.status;
+    try { const b = await r.json(); if (b && b.error) msg = b.error; } catch (e) {}
+    throw new Error(msg);
+  }
   return r.json();
-}).then(d => {
+}
+
+function renderDashboard(d) {
   const a = d.analysis, t = a.totals;
+  dashProps = a.properties;
 
   document.getElementById("hero").innerHTML =
     `<span class="hero-value">${eur1(t.net_per_available_night)}</span>
@@ -457,16 +622,459 @@ fetch("data.json", { cache: "no-cache" }).then(r => {
 
   document.getElementById("foot").innerHTML =
     `Generated ${esc(d.generated_at)} · <a href="https://github.com/mikki321/night-margin-mcp">GitHub</a> · <a href="https://github.com/mikki321/night-margin-mcp/issues/new?title=Feedback">Give feedback</a>`;
-}).catch(err => {
+}
+
+function dashboardError(err) {
   document.getElementById("hero").style.display = "none";
   document.getElementById("meta").textContent = "";
   document.getElementById("mapSec").style.display = "none";
   document.getElementById("triSec").style.display = "none";
+  const hint = API.on
+    ? `The UI server answered, but the analysis failed — check the server terminal, then reload.`
+    : `Generate <code>data.json</code> next to this page with <code>npm run demo:web</code>, then reload.`;
   document.getElementById("kpis").innerHTML =
     `<div class="errcard"><b>Couldn’t load the analysis</b>
       <div class="msg">${esc(err.message)}</div>
-      <div class="hint">Generate <code>data.json</code> next to this page with <code>npm run demo:web</code>, then reload.</div></div>`;
-});
+      <div class="hint">${hint}</div></div>`;
+}
+
+/* ================= Local API mode (tabs · decisions · targets · alerts) =================
+   Everything below only runs when /api/health answered — on the static Pages
+   copy none of it is reachable and the page behaves exactly as before. */
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  let body = null;
+  try { body = await r.json(); } catch (e) { /* non-JSON error body */ }
+  if (!r.ok) throw new Error((body && body.error) || "HTTP " + r.status);
+  return body;
+}
+function post(path, data) {
+  return api(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data || {}),
+  });
+}
+
+/* Long-running live actions (propose / save target / alert check) can take
+   real time against a large portfolio — tick elapsed seconds on the disabled
+   button so it never reads as frozen. Returns a stop function for finally{}. */
+function startElapsed(btn, label) {
+  btn.textContent = label + "…";
+  const t0 = Date.now();
+  const id = setInterval(() => {
+    btn.textContent = `${label}… ${Math.round((Date.now() - t0) / 1000)}s`;
+  }, 1000);
+  return () => clearInterval(id);
+}
+
+/* ---- Tabs ---- */
+const VIEWS = {
+  dash: ["hero", "meta", "kpis", "mapSec", "triSec"],
+  dec: ["decSec"],
+  tgt: ["tgtSec"],
+  alerts: ["alertSec"],
+};
+function initTabs() {
+  const tabs = document.getElementById("tabs");
+  tabs.hidden = false;
+  tabs.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-tab]");
+    if (btn) selectTab(btn.dataset.tab);
+  });
+}
+function selectTab(name) {
+  for (const b of document.querySelectorAll("#tabs button")) {
+    b.setAttribute("aria-selected", String(b.dataset.tab === name));
+  }
+  const show = new Set(VIEWS[name]);
+  for (const id of Object.values(VIEWS).flat()) {
+    const el = document.getElementById(id);
+    if (el) el.hidden = !show.has(id);
+  }
+  hideTip(); closeDetail();
+  if (name === "dec") initDecisions();
+  if (name === "tgt") initTargets();
+  if (name === "alerts") initAlerts();
+}
+
+/* ---- Modal (shared by propose / apply / revert) ---- */
+const modalBack = document.getElementById("modalBack");
+const modalBody = document.getElementById("modalBody");
+const modalFoot = document.getElementById("modalFoot");
+let modalPrevFocus = null;
+function openModal(title) {
+  document.getElementById("modalTitle").textContent = title;
+  modalBody.innerHTML = "";
+  modalFoot.innerHTML = "";
+  modalFoot.hidden = true;
+  modalPrevFocus = document.activeElement;
+  modalBack.hidden = false;
+  document.getElementById("modalClose").focus();
+}
+function closeModal() {
+  modalBack.hidden = true;
+  if (modalPrevFocus && modalPrevFocus.focus) modalPrevFocus.focus();
+  modalPrevFocus = null;
+}
+document.getElementById("modalClose").addEventListener("click", closeModal);
+modalBack.addEventListener("click", e => { if (e.target === modalBack) closeModal(); });
+
+function openInfoModal(title, text) {
+  openModal(title);
+  modalBody.innerHTML = `<pre>${esc(text)}</pre>`;
+}
+
+/** Two-step confirm: checkbox arms the button; the button does the write. */
+function twoStepConfirm({ verb, warnLabel, enabled, disabledReason, onConfirm }) {
+  modalFoot.hidden = false;
+  modalFoot.innerHTML = `
+    <div class="confirm-row">
+      <label><input type="checkbox" id="armBox"${enabled ? "" : " disabled"}><span>${esc(warnLabel)}</span></label>
+    </div>
+    <div class="confirm-row">
+      <button class="btn danger" id="confirmBtn" type="button" disabled>${esc(verb)}</button>
+      ${enabled ? "" : `<span class="hint">${esc(disabledReason)}</span>`}
+    </div>`;
+  const box = document.getElementById("armBox");
+  const btn = document.getElementById("confirmBtn");
+  box.addEventListener("change", () => { btn.disabled = !(box.checked && enabled); });
+  btn.addEventListener("click", () => onConfirm(btn));
+}
+
+/* ---- Decisions ---- */
+let decInited = false;
+let riskChoice = "recommended";
+function initDecisions() {
+  if (decInited) { refreshDecisions(); return; }
+  decInited = true;
+  const seg = document.getElementById("riskSeg");
+  seg.addEventListener("click", e => {
+    const btn = e.target.closest("button[data-risk]");
+    if (!btn) return;
+    riskChoice = btn.dataset.risk;
+    for (const b of seg.querySelectorAll("button")) b.setAttribute("aria-pressed", String(b === btn));
+  });
+  document.getElementById("proposeBtn").addEventListener("click", proposeNow);
+  if (API.health.mode === "demo") {
+    const note = document.getElementById("decNote");
+    note.hidden = false;
+    note.textContent =
+      "Demo mode — proposals come from synthetic data and cannot be applied to Wheelhouse. " +
+      "Set WHEELHOUSE_API_KEY and restart the UI server to work on your own portfolio.";
+  }
+  refreshDecisions();
+}
+async function refreshDecisions() {
+  const body = document.getElementById("decBody");
+  body.innerHTML = `<div class="empty">Loading the decision log…</div>`;
+  try {
+    const d = await api("api/decisions");
+    renderDecisions(d.decisions);
+  } catch (err) {
+    body.innerHTML = `<div class="errline">Couldn’t load the decision log: ${esc(err.message)}</div>`;
+  }
+}
+const isMockDecision = d => d.channel === "mock" || d.listing_id === "mock";
+function renderDecisions(list) {
+  const body = document.getElementById("decBody");
+  if (!list.length) {
+    body.innerHTML = `<div class="empty">No decisions yet — press “Propose now” to scan the next 30 days for gap nights priced below your cost floor.</div>`;
+    return;
+  }
+  const rows = [...list].reverse(); // newest first
+  body.innerHTML = `<div class="tablewrap"><table>
+    <tr><th>Id</th><th>Property</th><th>Nights</th><th class="num">Floor</th><th class="num">Rec</th><th>Status</th><th></th></tr>` +
+    rows.map(d => {
+      const span = d.dates.length === 1 ? d.dates[0] : `${d.dates[0]} – ${d.dates[d.dates.length - 1]}`;
+      let action = "";
+      if (d.status === "proposed") action = `<button class="btn" data-act="apply" data-id="${esc(d.id)}" type="button">Preview</button>`;
+      else if (d.status === "applied") action = `<button class="btn" data-act="revert" data-id="${esc(d.id)}" type="button">Revert</button>`;
+      return `<tr>
+        <td>${esc(d.id)}</td><td>${esc(d.property_id)}</td>
+        <td class="nowrap">${d.dates.length} night${d.dates.length === 1 ? "" : "s"} · ${esc(span)}</td>
+        <td class="num">${eur(d.floor_price)}</td><td class="num">${eur(d.wh_recommended_price)}</td>
+        <td><span class="badge ${esc(d.status)}">${esc(d.status)}${isMockDecision(d) ? " · demo" : ""}</span></td>
+        <td>${action}</td></tr>`;
+    }).join("") + `</table></div>`;
+  body.querySelector("table").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-act]");
+    if (!btn) return;
+    const d = list.find(x => x.id === btn.dataset.id);
+    if (!d) return;
+    if (btn.dataset.act === "apply") openApplyModal(d);
+    else openRevertModal(d);
+  });
+}
+async function proposeNow() {
+  const btn = document.getElementById("proposeBtn");
+  btn.disabled = true;
+  const stopElapsed = startElapsed(btn, "Proposing");
+  try {
+    const r = await post("api/propose", { risk: riskChoice });
+    openInfoModal(`Proposals — ${riskChoice} preset`, r.text);
+    renderDecisions(r.decisions);
+  } catch (err) {
+    openInfoModal("Propose failed", err.message);
+  } finally {
+    stopElapsed();
+    btn.disabled = false; btn.textContent = "Propose now";
+  }
+}
+async function openApplyModal(d) {
+  openModal(`Apply ${d.id} — ${d.property_id}`);
+  modalBody.innerHTML = `<div class="empty">Loading dry-run preview…</div>`;
+  let preview;
+  try {
+    preview = await post(`api/decisions/${encodeURIComponent(d.id)}/apply`, {});
+  } catch (err) {
+    modalBody.innerHTML = `<div class="errline">Preview failed: ${esc(err.message)}</div>`;
+    return;
+  }
+  modalBody.innerHTML = `<pre>${esc(preview.text)}</pre>`;
+  const enabled = API.health.mode === "live" && !isMockDecision(d);
+  twoStepConfirm({
+    verb: "I understand this writes real prices — Apply",
+    warnLabel: `I have read the dry run above: this writes ${d.dates.length} night${d.dates.length === 1 ? "" : "s"} of ${d.property_id} to Wheelhouse at ${eur(d.floor_price)}/night.`,
+    enabled,
+    disabledReason: isMockDecision(d)
+      ? "Demo proposal — applying requires WHEELHOUSE_API_KEY and a fresh propose run against your own portfolio."
+      : "Applying requires WHEELHOUSE_API_KEY on the UI server.",
+    onConfirm: async (btn) => {
+      btn.disabled = true; btn.textContent = "Applying…";
+      try {
+        const r = await post(`api/decisions/${encodeURIComponent(d.id)}/apply`, { confirm: true });
+        modalBody.innerHTML = `<pre>${esc(r.text)}</pre>`;
+        modalFoot.hidden = true; modalFoot.innerHTML = "";
+        renderDecisions(r.decisions);
+      } catch (err) {
+        modalBody.insertAdjacentHTML("beforeend", `<div class="errline">Apply failed: ${esc(err.message)}</div>`);
+        btn.disabled = false; btn.textContent = "I understand this writes real prices — Apply";
+      }
+    },
+  });
+}
+async function openRevertModal(d) {
+  openModal(`Revert ${d.id} — ${d.property_id}`);
+  modalBody.innerHTML = `<div class="empty">Loading revert preview…</div>`;
+  let preview;
+  try {
+    preview = await post(`api/decisions/${encodeURIComponent(d.id)}/revert`, {});
+  } catch (err) {
+    modalBody.innerHTML = `<div class="errline">Preview failed: ${esc(err.message)}</div>`;
+    return;
+  }
+  modalBody.innerHTML = `<pre>${esc(preview.text)}</pre>`;
+  const enabled = API.health.mode === "live" && !isMockDecision(d);
+  twoStepConfirm({
+    verb: "I understand this deletes the written rates — Revert",
+    warnLabel: `I have read the preview above: this deletes the floor rates written for ${d.property_id} and restores the prior custom rates from the snapshot.`,
+    enabled,
+    disabledReason: "Reverting requires WHEELHOUSE_API_KEY on the UI server.",
+    onConfirm: async (btn) => {
+      btn.disabled = true; btn.textContent = "Reverting…";
+      try {
+        const r = await post(`api/decisions/${encodeURIComponent(d.id)}/revert`, { confirm: true });
+        modalBody.innerHTML = `<pre>${esc(r.text)}</pre>`;
+        modalFoot.hidden = true; modalFoot.innerHTML = "";
+        renderDecisions(r.decisions);
+      } catch (err) {
+        modalBody.insertAdjacentHTML("beforeend", `<div class="errline">Revert failed: ${esc(err.message)}</div>`);
+        btn.disabled = false; btn.textContent = "I understand this deletes the written rates — Revert";
+      }
+    },
+  });
+}
+
+/* ---- Targets ---- */
+let tgtInited = false;
+let savedTargets = [];
+let tgtProp = null;
+function nextMonths(n) {
+  const out = [];
+  const now = new Date();
+  let y = now.getUTCFullYear(), m = now.getUTCMonth();
+  for (let i = 0; i < n; i++) {
+    out.push(`${y}-${String(m + 1).padStart(2, "0")}`);
+    m++; if (m === 12) { m = 0; y++; }
+  }
+  return out;
+}
+function monthLabel(month) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m - 1, 1)).toLocaleString("en-US", { month: "long", year: "numeric", timeZone: "UTC" });
+}
+/* Booked gross for ALL properties and all 6 months in ONE request — not six
+   concurrent /api/analysis calls (in live mode those meant a minutes-long
+   "Loading actuals…" stall on a large portfolio). The response covers every
+   property, so switching properties repaints instantly from this cache. */
+let actualsPromise = null; // Promise<{months: {"YYYY-MM": {property_id: gross}}}>
+function targetActuals() {
+  if (!actualsPromise) {
+    actualsPromise = api("api/target-actuals?months=" + nextMonths(6).join(",")).catch(err => {
+      actualsPromise = null; // transient failure — allow a retry on the next render
+      throw err;
+    });
+  }
+  return actualsPromise;
+}
+async function initTargets() {
+  if (tgtInited) return;
+  const body = document.getElementById("tgtBody");
+  body.innerHTML = `<div class="empty">Loading properties and targets…</div>`;
+  try {
+    const [tg, props] = await Promise.all([
+      api("api/targets"),
+      dashProps ? Promise.resolve(dashProps) : api("api/analysis").then(d => d.analysis.properties),
+    ]);
+    tgtInited = true;
+    savedTargets = tg.targets;
+    const sorted = [...props].sort((a, b) => String(a.property_id).localeCompare(String(b.property_id)));
+    body.innerHTML = `<div class="props" id="propChips">` +
+      sorted.map(p => `<button class="pchip" type="button" data-pid="${esc(p.property_id)}" aria-pressed="false">${esc(p.property_id)}</button>`).join("") +
+      `</div><div id="monthGrid"></div>`;
+    document.getElementById("propChips").addEventListener("click", e => {
+      const chip = e.target.closest("button[data-pid]");
+      if (!chip) return;
+      tgtProp = chip.dataset.pid;
+      for (const c of document.querySelectorAll("#propChips .pchip")) {
+        c.setAttribute("aria-pressed", String(c === chip));
+      }
+      renderMonthGrid(tgtProp);
+    });
+    // Yksi kuuntelija koko ruudukolle — renderMonthGrid vain vaihtaa sisällön.
+    document.getElementById("monthGrid").addEventListener("click", e => {
+      const btn = e.target.closest("button[data-save]");
+      if (btn && tgtProp) saveTarget(tgtProp, btn.dataset.save, btn);
+    });
+  } catch (err) {
+    body.innerHTML = `<div class="errline">Couldn’t load targets: ${esc(err.message)}</div>`;
+  }
+}
+function savedTargetFor(pid, month) {
+  return savedTargets.find(t => t.property_id === pid && t.month === month);
+}
+function paintProgress(card, gross, target) {
+  const bar = card.querySelector(".progress i");
+  const note = card.querySelector(".pnote");
+  if (target > 0) {
+    const p = (gross / target) * 100;
+    bar.style.width = Math.max(0, Math.min(100, p)) + "%";
+    note.textContent = `${eur(gross)} of ${eur(target)} (${p.toFixed(0)}%)`;
+  } else {
+    bar.style.width = "0%";
+    note.textContent = `${eur(gross)} booked — no target set`;
+  }
+}
+function renderMonthGrid(pid) {
+  const grid = document.getElementById("monthGrid");
+  const months = nextMonths(6);
+  grid.innerHTML = `<div class="months">` + months.map(m => {
+    const t = savedTargetFor(pid, m);
+    return `<div class="mcard" data-month="${m}">
+      <div class="mlabel">${esc(monthLabel(m))}</div>
+      <div class="trow">
+        <input type="number" min="1" step="100" inputmode="numeric" placeholder="Gross target €"
+          value="${t ? esc(String(t.gross_target)) : ""}" aria-label="Gross target for ${esc(pid)} in ${esc(monthLabel(m))}, euros">
+        <button class="btn" type="button" data-save="${m}">Save</button>
+      </div>
+      <div class="progress" role="presentation"><i style="width:0%"></i></div>
+      <div class="pnote">Loading actuals…</div>
+      <div class="snote" hidden></div>
+    </div>`;
+  }).join("") + `</div>`;
+  targetActuals().then(actuals => {
+    if (tgtProp !== pid) return;
+    for (const m of months) {
+      const card = grid.querySelector(`.mcard[data-month="${m}"]`);
+      if (!card || !card.isConnected) continue;
+      const t = savedTargetFor(pid, m);
+      paintProgress(card, (actuals.months[m] || {})[pid] || 0, t ? t.gross_target : 0);
+    }
+  }).catch(err => {
+    for (const note of grid.querySelectorAll(".pnote")) {
+      note.textContent = "Couldn’t load actuals: " + err.message;
+    }
+  });
+}
+async function saveTarget(pid, month, btn) {
+  const card = btn.closest(".mcard");
+  const input = card.querySelector("input");
+  const snote = card.querySelector(".snote");
+  const value = Number(input.value);
+  if (!Number.isFinite(value) || value <= 0) {
+    snote.hidden = false;
+    snote.innerHTML = `<span class="errline" style="padding:0">Enter a positive gross target in euros first.</span>`;
+    return;
+  }
+  btn.disabled = true;
+  const stopElapsed = startElapsed(btn, "Saving");
+  try {
+    const r = await post("api/targets", { property_id: pid, month, gross_target: value });
+    savedTargets = r.targets;
+    snote.hidden = false;
+    snote.textContent = r.text.split("\n")[0];
+    const actuals = await targetActuals();
+    paintProgress(card, (actuals.months[month] || {})[pid] || 0, value);
+  } catch (err) {
+    snote.hidden = false;
+    snote.innerHTML = `<span class="errline" style="padding:0">Save failed: ${esc(err.message)}</span>`;
+  } finally {
+    stopElapsed();
+    btn.disabled = false; btn.textContent = "Save";
+  }
+}
+
+/* ---- Alerts ---- */
+let alertsInited = false;
+function initAlerts() {
+  if (alertsInited) return;
+  alertsInited = true;
+  document.getElementById("alertChannel").textContent = API.health.notify_configured
+    ? "Notification channel: configured on the server — check_alerts can send to it (this page never sends; it only runs the check)."
+    : "Notification channel: not configured (no Telegram bot or webhook set on the server) — reports show here only.";
+  document.getElementById("alertBtn").addEventListener("click", runAlerts);
+}
+function mdLite(text) {
+  return esc(text)
+    .replace(/^## (.+)$/gm, "<b>$1</b>")
+    .replace(/^### (.+)$/gm, "<b>$1</b>")
+    .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+}
+async function runAlerts() {
+  const btn = document.getElementById("alertBtn");
+  const out = document.getElementById("alertOut");
+  btn.disabled = true;
+  const stopElapsed = startElapsed(btn, "Running");
+  out.innerHTML = `<div class="empty">Checking gap-night floors and new bookings…</div>`;
+  try {
+    /* POST — the check records new bookings as seen (a write), never a GET. */
+    const r = await post("api/alerts", {});
+    out.innerHTML = `<div class="report">${mdLite(r.text)}</div>`;
+  } catch (err) {
+    out.innerHTML = `<div class="errline">Alert check failed: ${esc(err.message)}</div>`;
+  } finally {
+    stopElapsed();
+    btn.disabled = false; btn.textContent = "Run check";
+  }
+}
+
+/* ---------- Bootstrap ---------- */
+(async () => {
+  try {
+    const r = await fetch("api/health", { cache: "no-store" });
+    if (r.ok) {
+      const h = await r.json();
+      if (h && h.ok === true) { API.on = true; API.health = h; initTabs(); }
+    }
+  } catch (e) { /* no local API — static Pages copy behaves exactly as before */ }
+  try {
+    renderDashboard(await fetchDashboard(API.on ? "api/analysis" : "data.json"));
+  } catch (err) {
+    dashboardError(err);
+  }
+})();
 </script>
 </body>
 </html>
