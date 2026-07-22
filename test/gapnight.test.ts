@@ -223,6 +223,33 @@ describe("gapNightReport", () => {
   });
 });
 
+describe("gapNightReport — mennyt yö (regressio: FILL-verdikti menneelle yölle ilman huomautusta)", () => {
+  const PAST_NOTE = "this night is in the past — the verdict is retrospective only";
+
+  it("today > date → retrospektiivisyys-huomautus verdiktin perässä", () => {
+    const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: "2026-09-01" }));
+    expect(out).toContain("FILL"); // verdikti annetaan yhä
+    expect(out).toContain(PAST_NOTE);
+    expect(out.indexOf("FILL")).toBeLessThan(out.indexOf(PAST_NOTE)); // huomautus verdiktin jälkeen
+  });
+
+  it("myös lattia-raportti ilman hintaa saa huomautuksen menneelle yölle", () => {
+    const out = gapNightReport("p1", DATE, baseData({ today: "2026-09-01" }));
+    expect(out).toContain(PAST_NOTE);
+  });
+
+  it("tämä päivä tai tuleva yö → ei huomautusta", () => {
+    expect(gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: DATE }))).not.toContain(
+      PAST_NOTE,
+    );
+    expect(
+      gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: "2026-08-01" })),
+    ).not.toContain(PAST_NOTE);
+    // ilman today-kenttää käytös ennallaan (puhdas funktio, vanhat kutsujat)
+    expect(gapNightReport("p1", DATE, baseData({ candidatePrice: 150 }))).not.toContain(PAST_NOTE);
+  });
+});
+
 describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", () => {
   const env = {} as NodeJS.ProcessEnv;
 
@@ -291,6 +318,34 @@ describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", (
     const out = await runGapNightCheck({ property_id: "demo-1br-01", date: "2026-06-23" }, env);
     expect(out).not.toContain("Not a gap night");
     expect(out).toContain("Floor €95"); // manual 70 + matka 0 + kate 25
+  });
+
+  it("mennyt yö (README-esimerkki) → verdikti + retrospektiivisyys-huomautus (regressio)", async () => {
+    const out = await runGapNightCheck(
+      { property_id: "demo-1br-01", date: "2026-06-23", candidate_price: 96 },
+      env,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    expect(out).toContain("FILL"); // sama verdikti kuin ennenkin …
+    expect(out).toContain(
+      "this night is in the past — the verdict is retrospective only; pricing decisions apply to future nights",
+    );
+  });
+
+  it("tuleva yö → ei mennyt-huomautusta", async () => {
+    const { property_id, date } = findMockDate(false); // elokuu 2026
+    const out = await runGapNightCheck(
+      { property_id, date, candidate_price: 200 },
+      env,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    expect(out).not.toContain("retrospective");
+  });
+
+  it("olematon kalenteripäivä (2026-02-30) → selkeä virhe eikä hiljaista uudelleentulkintaa (regressio)", async () => {
+    await expect(
+      runGapNightCheck({ property_id: "demo-1br-01", date: "2026-02-30" }, env),
+    ).rejects.toThrow(/does not exist in the calendar/);
   });
 
   it("kelvoton MIN_MARGIN kaatuu selkeästi", async () => {

@@ -41,6 +41,23 @@ export function restoreBodyFromSnapshot(rate: WhCustomRate): Record<string, unkn
   return body;
 }
 
+/**
+ * Miksi snapshotin ratea EI voi palauttaa PUTilla — vai voiko (undefined = voi).
+ * Whitelist kattaa vain verifioidun fixed-muodon (viikonpäivähinnat): muun
+ * tyyppisen raten arvokentät (esim. prosentti/amount) putoaisivat pois ja
+ * palautus loisi raten ilman hintaa. Sellaista ei PUTata — käyttäjä palauttaa
+ * sen käsin Wheelhousessa.
+ */
+export function unsupportedRateReason(rate: WhCustomRate): string | undefined {
+  if (rate.rate_type !== undefined && rate.rate_type !== null && rate.rate_type !== "fixed") {
+    return `unsupported rate type "${String(rate.rate_type)}"`;
+  }
+  if (!CUSTOM_RATE_WEEKDAYS.some((day) => rate[day] !== undefined && rate[day] !== null)) {
+    return "no per-weekday prices to restore";
+  }
+  return undefined;
+}
+
 /** Leikkaavatko [a.start, a.end) ja [b.start, b.end) — end_date on eksklusiivinen. */
 function rangesOverlap(
   a: { start_date: string; end_date: string },
@@ -90,13 +107,19 @@ export async function runRevertDecision(
       ranges.some((r) => rangesOverlap({ start_date: rate.start_date as string, end_date: rate.end_date as string }, r)),
   );
 
+  const restorableCount = priorRates.filter((r) => unsupportedRateReason(r) === undefined).length;
+  const unsupportedCount = priorRates.length - restorableCount;
+
   if (args.confirm !== true) {
     return [
       `## Revert preview — decision ${decision.id} (nothing changed)`,
       `This would DELETE ${ranges.length} custom rate range${ranges.length === 1 ? "" : "s"} from listing ${decision.listing_id} (channel ${decision.channel}):`,
       ranges.map((r) => `- ${r.start_date} → ${r.end_date}`).join("\n"),
       priorRates.length > 0
-        ? `It would then restore ${priorRates.length} prior custom rate${priorRates.length === 1 ? "" : "s"} from the snapshot taken before the write.`
+        ? `It would then restore ${restorableCount} prior custom rate${restorableCount === 1 ? "" : "s"} from the snapshot taken before the write.` +
+          (unsupportedCount > 0
+            ? ` ${unsupportedCount} prior rate${unsupportedCount === 1 ? " has" : "s have"} an unsupported shape and must be restored manually in Wheelhouse.`
+            : "")
         : "No prior custom rates overlapped these dates — after the delete, Wheelhouse recommendations take over again.",
       `To execute: revert_decision {"decision_id": "${decision.id}", "confirm": true}`,
     ].join("\n\n");
@@ -155,6 +178,15 @@ export async function runRevertDecision(
       const body = restoreBodyFromSnapshot(rate);
       if (!body) {
         restoreNotes.push("one snapshot entry was missing start/end dates — skipped");
+        continue;
+      }
+      // Ei-fixed-rate: whitelist pudottaisi arvokentät → EI PUTata (löydös 5).
+      // Ei lasketa restoreFailureksi — uusintayritys ei auttaisi, käsityö kyllä.
+      const unsupported = unsupportedRateReason(rate);
+      if (unsupported !== undefined) {
+        restoreNotes.push(
+          `prior rate ${rate.start_date} → ${rate.end_date} was not restored (${unsupported}) — restore it manually in Wheelhouse`,
+        );
         continue;
       }
       try {

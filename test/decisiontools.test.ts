@@ -1,11 +1,15 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { type Decision, readDecisions, writeDecisions } from "../src/state.js";
+import { type Decision, acquireStateLock, readDecisions, writeDecisions } from "../src/state.js";
 import { buildRatePayload, runApplyDecision } from "../src/tools/applyDecision.js";
-import { proposeWindow, runProposeDecisions } from "../src/tools/proposeDecisions.js";
-import { restoreBodyFromSnapshot, runRevertDecision } from "../src/tools/revertDecision.js";
+import { formatIdRanges, proposeWindow, runProposeDecisions } from "../src/tools/proposeDecisions.js";
+import {
+  restoreBodyFromSnapshot,
+  runRevertDecision,
+  unsupportedRateReason,
+} from "../src/tools/revertDecision.js";
 import { WheelhouseClient, type FetchLike } from "../src/wheelhouse/client.js";
 
 /**
@@ -177,6 +181,20 @@ describe("propose_decisions — mock-tila (ei avainta, ei verkkoa)", () => {
     }
   });
 
+  it("uusi ajo kertoo korvatut id:t tulosteessa — vanhat id:t eivät katoa hiljaa (regressio)", async () => {
+    const e = { ...env, AVG_TURNOVER_COST: "200" } as NodeJS.ProcessEnv;
+    const first = await runProposeDecisions({}, e, { now: NOW });
+    expect(first).not.toContain("Replaced"); // ensimmäisellä ajolla ei ole mitä korvata
+    const count = readDecisions(e).length;
+
+    const second = await runProposeDecisions({}, e, { now: NOW });
+    expect(second).toContain(
+      `Replaced ${count} earlier proposal${count === 1 ? "" : "s"} for this window`,
+    );
+    expect(second).toContain(`d1${count > 1 ? `–d${count}` : ""} `); // korvatut id:t nimetään
+    expect(second).toContain("no longer valid; use the new ids below");
+  });
+
   it("kokonaan mennyt ikkuna → selkeä viesti, ei tallennuksia", async () => {
     const out = await runProposeDecisions({ from: "2026-01-01", to: "2026-02-01" }, env, { now: NOW });
     expect(out).toContain("entirely in the past");
@@ -249,6 +267,52 @@ describe("propose_decisions — WH-tila (fake-client)", () => {
     const d = readDecisions(e)[0];
     expect(d.channel).toBe("hypothetical");
     expect(d.channel).not.toBe("hostaway");
+  });
+
+  it("applied-päätöksen kattamat yöt EI ehdoteta uudelleen (regressio: päällekkäiset päätökset samoille öille)", async () => {
+    const e = whEnv();
+    const { client } = fakeWheelhouse();
+    // d1 kattaa kaikki 3 aukkoyötä ja on sovellettu
+    await runProposeDecisions({}, e, { now: NOW, client });
+    await runApplyDecision({ decision_id: "d1", confirm: true }, e, { client });
+
+    // Suositukset ovat yhä 50 € < lattia 95 € (fake ei heijasta kirjoitusta) —
+    // ilman poissulkua samat yöt flägättäisiin uudelleen d2:ksi.
+    const out = await runProposeDecisions({}, e, { now: NOW, client });
+
+    expect(out).toContain(
+      "No proposals — all 3 gap nights in the window are already covered by applied decision d1.",
+    );
+    expect(out).toContain("Revert it first to re-propose these nights.");
+    expect(out).toContain("excluded from proposals");
+    const decisions = readDecisions(e);
+    expect(decisions).toHaveLength(1); // vain d1 — ei päällekkäistä d2:ta
+    expect(decisions[0]).toMatchObject({ id: "d1", status: "applied" });
+  });
+
+  it("osittainen päällekkäisyys: vain applied-yöt suljetaan pois, loput ehdotetaan + huomautus", async () => {
+    const e = whEnv();
+    const { client } = fakeWheelhouse();
+    // d1 kattaa vain ensimmäisen aukkoyön ja on sovellettu
+    seedDecision(e, {
+      dates: ["2026-06-28"],
+      status: "applied",
+      applied_at: "2026-06-01T00:00:00.000Z",
+      applied_ranges: [{ start_date: "2026-06-28", end_date: "2026-06-29" }],
+      snapshot: { prior_custom_rates: [] },
+    });
+
+    const out = await runProposeDecisions({}, e, { now: NOW, client });
+
+    expect(out).toContain("1 gap night is already covered by applied decision d1");
+    const decisions = readDecisions(e);
+    expect(decisions).toHaveLength(2);
+    expect(decisions[0]).toMatchObject({ id: "d1", status: "applied", dates: ["2026-06-28"] });
+    expect(decisions[1]).toMatchObject({
+      id: "d2",
+      status: "proposed",
+      dates: ["2026-06-29", "2026-06-30"], // 06-28 EI ole mukana
+    });
   });
 });
 
@@ -465,6 +529,94 @@ describe("apply_decision — confirm=true kirjoittaa, snapshottaa ja verifioi", 
     expect(out).toContain("already applied");
     expect(out).toContain("revert_decision");
   });
+
+  it("jokainen onnistunut PUT persistoituu levylle ENNEN seuraavaa PUTia (regressio: kaatumisikkuna PUT-loopissa)", async () => {
+    const e = whEnv();
+    // kaksi EI-peräkkäistä yötä → kaksi PUT-rangea
+    seedDecision(e, { dates: ["2026-06-28", "2026-06-30"] });
+    // Mitä decisions.json väittää LEVYLLÄ sillä hetkellä kun kukin PUT lähtee?
+    // Jos prosessi kuolisi juuri tässä, tämä on tila josta revert lähtee.
+    const onDiskAtPut: { start_date: string; end_date: string }[][] = [];
+    const client = clientWith(async (url, init) => {
+      const method = init?.method ?? "GET";
+      if (new URL(url).pathname.includes("/custom_rates")) {
+        if (method === "GET") return ok([]);
+        if (method === "PUT") {
+          const disk = JSON.parse(readFileSync(join(dir, "decisions.json"), "utf8")) as Decision[];
+          onDiskAtPut.push(disk[0].applied_ranges ?? []);
+          return ok(JSON.parse(init!.body!));
+        }
+      }
+      throw new Error(`unhandled ${method} ${url}`);
+    });
+
+    await runApplyDecision({ decision_id: "d1", confirm: true }, e, { client });
+
+    // PUT #2:n hetkellä range 1 on JO lokissa — kaatuminen ei jättäisi
+    // "proposed ilman applied_rangeja" -valhetta (revert toimisi).
+    expect(onDiskAtPut).toEqual([[], [{ start_date: "2026-06-28", end_date: "2026-06-29" }]]);
+    const final = readDecisions(e)[0];
+    expect(final.status).toBe("applied");
+    expect(final.applied_ranges).toEqual([
+      { start_date: "2026-06-28", end_date: "2026-06-29" },
+      { start_date: "2026-06-30", end_date: "2026-07-01" },
+    ]);
+  });
+});
+
+describe("rinnakkaissessiot — state-lukko tooleissa (regressio: lost update / myrkytetty snapshot)", () => {
+  const lockEnv = (base: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+    ({ ...base, NM_LOCK_TIMEOUT_MS: "250" }) as NodeJS.ProcessEnv;
+
+  it("apply confirm=true toisen session lukkoa vasten → selkeä virhe, ei yhtään API-kutsua", async () => {
+    const e = lockEnv(whEnv());
+    seedDecision(e);
+    const { client, calls } = fakeWheelhouse();
+    const release = await acquireStateLock(e); // "toinen sessio"
+    try {
+      await expect(
+        runApplyDecision({ decision_id: "d1", confirm: true }, e, { client }),
+      ).rejects.toThrow(/locked by another night-margin session/);
+    } finally {
+      release();
+    }
+    expect(calls).toHaveLength(0); // snapshot-GETiä tai PUTia ei ehditty tehdä
+    expect(readDecisions(e)[0].status).toBe("proposed");
+  });
+
+  it("revert confirm=true toisen session lukkoa vasten → selkeä virhe, tila ennallaan", async () => {
+    const e = lockEnv(whEnv());
+    seedDecision(e, {
+      status: "applied",
+      applied_at: "2026-06-02T00:00:00.000Z",
+      applied_ranges: [{ start_date: "2026-06-28", end_date: "2026-07-01" }],
+      snapshot: { prior_custom_rates: [] },
+    });
+    const { client, calls } = fakeWheelhouse();
+    const release = await acquireStateLock(e);
+    try {
+      await expect(
+        runRevertDecision({ decision_id: "d1", confirm: true }, e, { client }),
+      ).rejects.toThrow(/locked by another night-margin session/);
+    } finally {
+      release();
+    }
+    expect(calls).toHaveLength(0);
+    expect(readDecisions(e)[0].status).toBe("applied");
+  });
+
+  it("propose toisen session lukkoa vasten → selkeä virhe, lokiin ei kirjoiteta", async () => {
+    const e = lockEnv({ ...env, AVG_TURNOVER_COST: "200" } as NodeJS.ProcessEnv);
+    const release = await acquireStateLock(e);
+    try {
+      await expect(runProposeDecisions({}, e, { now: NOW })).rejects.toThrow(
+        /locked by another night-margin session/,
+      );
+    } finally {
+      release();
+    }
+    expect(readDecisions(e)).toEqual([]); // mitään ei tallennettu
+  });
 });
 
 describe("revert_decision", () => {
@@ -548,6 +700,137 @@ describe("revert_decision", () => {
     await expect(runRevertDecision({ decision_id: "d1", confirm: true }, env)).rejects.toThrow(
       /requires WHEELHOUSE_API_KEY/,
     );
+  });
+
+  it("palautus-PUT epäonnistuu → status EI ole reverted ja uusi ajo saa palautuksen loppuun (regressio)", async () => {
+    const priorRate = {
+      start_date: "2026-06-29",
+      end_date: "2026-06-30",
+      rate_type: "fixed",
+      currency: "EUR",
+      monday: 80,
+      tuesday: 80,
+      wednesday: 80,
+      thursday: 80,
+      friday: 80,
+      saturday: 80,
+      sunday: 80,
+      expires_at: null,
+    };
+    const e = whEnv();
+    appliedSeed(e, [priorRate]);
+    const written = buildRatePayload({ start_date: "2026-06-28", end_date: "2026-07-01" }, 95, "EUR");
+    // Revertissä ainoa PUT on palautus-PUT → failPutOnCall: 1 kaataa juuri sen.
+    const { client, store } = fakeWheelhouse({
+      priorRates: [{ ...written, expires_at: null }],
+      failPutOnCall: 1,
+    });
+
+    const partial = await runRevertDecision({ decision_id: "d1", confirm: true }, e, { client });
+    expect(partial).toContain("## Partially reverted decision d1");
+    expect(partial).toContain("failed to restore prior rate 2026-06-29 → 2026-06-30");
+    expect(partial).toContain('Re-run revert_decision {"decision_id": "d1", "confirm": true}');
+    // Vanha bugi: status meni ehdoitta "reverted" → uusi ajo kieltäytyi vaikka
+    // snapshot oli tallessa ja yöt jäivät WH-suositusten varaan.
+    expect(readDecisions(e)[0].status).toBe("applied");
+
+    // Uusi ajo samaa varastoa vasten: DELETE sietää jo-poistetun, PUT #2 onnistuu.
+    const done = await runRevertDecision({ decision_id: "d1", confirm: true }, e, { client });
+    expect(done).toContain("## Reverted decision d1");
+    expect(readDecisions(e)[0].status).toBe("reverted");
+    // varastossa on täsmälleen käyttäjän aiempi rate (whitelist-body + faken expires_at)
+    expect(store).toEqual([
+      {
+        start_date: "2026-06-29",
+        end_date: "2026-06-30",
+        rate_type: "fixed",
+        currency: "EUR",
+        monday: 80,
+        tuesday: 80,
+        wednesday: 80,
+        thursday: 80,
+        friday: 80,
+        saturday: 80,
+        sunday: 80,
+        expires_at: null,
+      },
+    ]);
+  });
+
+  it("ei-fixed-tyyppinen aiempi rate → EI palautus-PUTia, selkeä käsityö-ohje, revert valmistuu (regressio: arvokentät putoaisivat)", async () => {
+    // Spec verifioi vain fixed-muodon — prosenttiraten arvokenttiä whitelist ei
+    // tunne, joten PUT loisi raten ilman hintaa. Parempi: älä PUTtaa, ohjeista.
+    const percentPrior = {
+      start_date: "2026-06-29",
+      end_date: "2026-06-30",
+      rate_type: "percent",
+      currency: "EUR",
+      amount: 15,
+      expires_at: null,
+    };
+    const e = whEnv();
+    appliedSeed(e, [percentPrior]);
+    const written = buildRatePayload({ start_date: "2026-06-28", end_date: "2026-07-01" }, 95, "EUR");
+    const { client, store, calls } = fakeWheelhouse({ priorRates: [{ ...written, expires_at: null }] });
+
+    // esikatselu kertoo käsityötarpeen etukäteen
+    const preview = await runRevertDecision({ decision_id: "d1" }, e);
+    expect(preview).toContain("It would then restore 0 prior custom rates");
+    expect(preview).toContain("1 prior rate has an unsupported shape and must be restored manually in Wheelhouse");
+
+    const out = await runRevertDecision({ decision_id: "d1", confirm: true }, e, { client });
+    expect(out).toContain("## Reverted decision d1"); // valmistuu — retry ei auttaisi
+    expect(out).toContain(
+      'prior rate 2026-06-29 → 2026-06-30 was not restored (unsupported rate type "percent") — restore it manually in Wheelhouse',
+    );
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0); // hintaonton ratea EI kirjoitettu
+    expect(readDecisions(e)[0].status).toBe("reverted");
+    expect(store).toEqual([]); // työkalun oma rate poistettu, mitään ei luotu tilalle
+  });
+
+  it("fixed-rate ilman viikonpäivähintoja → ohitetaan huomautuksella eikä PUTata tyhjää", async () => {
+    const bareRate = {
+      start_date: "2026-06-29",
+      end_date: "2026-06-30",
+      rate_type: "fixed",
+      currency: "EUR",
+      expires_at: null,
+    };
+    const e = whEnv();
+    appliedSeed(e, [bareRate]);
+    const written = buildRatePayload({ start_date: "2026-06-28", end_date: "2026-07-01" }, 95, "EUR");
+    const { client, calls } = fakeWheelhouse({ priorRates: [{ ...written, expires_at: null }] });
+
+    const out = await runRevertDecision({ decision_id: "d1", confirm: true }, e, { client });
+    expect(out).toContain("no per-weekday prices to restore");
+    expect(out).toContain("restore it manually in Wheelhouse");
+    expect(calls.filter((c) => c.method === "PUT")).toHaveLength(0);
+    expect(readDecisions(e)[0].status).toBe("reverted");
+  });
+});
+
+describe("formatIdRanges", () => {
+  it("tiivistää peräkkäiset id:t rangeksi ja säilyttää irtonaiset", () => {
+    expect(formatIdRanges(["d1"])).toBe("d1");
+    expect(formatIdRanges(["d3", "d1", "d2"])).toBe("d1–d3");
+    expect(formatIdRanges(["d1", "d2", "d3", "d7"])).toBe("d1–d3, d7");
+    expect(formatIdRanges(["d2", "custom-id"])).toBe("d2, custom-id");
+  });
+});
+
+describe("unsupportedRateReason", () => {
+  it("fixed viikonpäivähinnoin = palautettavissa; muut tyypit ja hinnaton fixed eivät", () => {
+    expect(
+      unsupportedRateReason({ start_date: "a", end_date: "b", rate_type: "fixed", monday: 80 }),
+    ).toBeUndefined();
+    // rate_type puuttuu mutta viikonpäivähinnat on → palautettavissa (PUT asettaa fixedin)
+    expect(unsupportedRateReason({ start_date: "a", end_date: "b", tuesday: 90 })).toBeUndefined();
+    expect(
+      unsupportedRateReason({ start_date: "a", end_date: "b", rate_type: "percent", amount: 10 }),
+    ).toMatch(/unsupported rate type "percent"/);
+    expect(
+      unsupportedRateReason({ start_date: "a", end_date: "b", rate_type: "fixed" }),
+    ).toMatch(/no per-weekday prices/);
   });
 });
 

@@ -4,6 +4,7 @@ import {
   gapNightFloor,
   nightsInPeriod,
   overlapNights,
+  parseISODate,
   reservationNet,
 } from "../src/core/calc.js";
 import type { Reservation, TurnoverCost } from "../src/core/types.js";
@@ -34,6 +35,26 @@ const cost = (id: string, cleaning: number, travel = 0, laundry = 0): TurnoverCo
 });
 
 const costMap = (...costs: TurnoverCost[]) => new Map(costs.map((c) => [c.reservation_id, c]));
+
+describe("parseISODate — kalenteritarkistus (regressio: 2026-02-30 hyväksyttiin ja tulkittiin hiljaa 2026-03-02:ksi)", () => {
+  it("hyväksyy oikeat kalenteripäivät, myös karkauspäivän", () => {
+    expect(parseISODate("2026-06-15")).toBe(Date.parse("2026-06-15T00:00:00Z"));
+    expect(parseISODate("2024-02-29")).toBe(Date.parse("2024-02-29T00:00:00Z")); // 2024 on karkausvuosi
+    expect(parseISODate("2026-12-31")).toBe(Date.parse("2026-12-31T00:00:00Z"));
+  });
+
+  it("hylkää olemattomat kalenteripäivät joita V8 pyöräyttäisi eteenpäin", () => {
+    expect(() => parseISODate("2026-02-30")).toThrow(/does not exist in the calendar/);
+    expect(() => parseISODate("2026-04-31")).toThrow(/does not exist in the calendar/);
+    expect(() => parseISODate("2026-02-29")).toThrow(/does not exist in the calendar/); // 2026 EI ole karkausvuosi
+  });
+
+  it("hylkää yhä väärän muodon selkeällä virheellä", () => {
+    expect(() => parseISODate("2026-13-01")).toThrow(/Invalid date/);
+    expect(() => parseISODate("kesäkuu")).toThrow(/Invalid date/);
+    expect(() => parseISODate("2026-6-15")).toThrow(/Invalid date/); // ei-nollattu kuukausi ei läpäise round-trippiä
+  });
+});
 
 describe("nightsInPeriod", () => {
   it("laskee yöt [from, to) -välillä", () => {

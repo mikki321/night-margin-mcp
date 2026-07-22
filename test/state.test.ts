@@ -1,9 +1,20 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   type Decision,
+  acquireStateLock,
   nextDecisionIdNumber,
   readDecisions,
   readTargets,
@@ -91,6 +102,43 @@ describe("targets.json luku ja kirjoitus", () => {
     expect(readTargets(env)).toEqual(targets);
     // kirjoitus on ihmisluettavaa JSONia
     expect(readFileSync(join(dir, "targets.json"), "utf8")).toContain('"gross_target": 6000');
+  });
+});
+
+describe("acquireStateLock — rinnakkaisten sessioiden read-modify-write-suoja (regressio: lost update)", () => {
+  /** Lyhyt timeout testissä — tuotannon 5 s odotus ei sovi testiajoon. */
+  const fastEnv = (over: Record<string, string> = {}): NodeJS.ProcessEnv =>
+    ({ NM_STATE_DIR: dir, NM_LOCK_TIMEOUT_MS: "250", ...over }) as NodeJS.ProcessEnv;
+
+  it("lukko pitää: toinen acquire aikakatkeaa selkeällä virheellä kunnes release", async () => {
+    const release = await acquireStateLock(fastEnv());
+    expect(existsSync(join(dir, ".lock"))).toBe(true);
+
+    await expect(acquireStateLock(fastEnv())).rejects.toThrow(
+      /locked by another night-margin session/,
+    );
+
+    release();
+    expect(existsSync(join(dir, ".lock"))).toBe(false);
+    const release2 = await acquireStateLock(fastEnv());
+    release2();
+  });
+
+  it("release on idempotentti — kahdesti kutsuminen ei kaada", async () => {
+    const release = await acquireStateLock(fastEnv());
+    release();
+    expect(() => release()).not.toThrow();
+  });
+
+  it("kaatuneen prosessin vanha lukko siivotaan iän perusteella", async () => {
+    const lock = join(dir, ".lock");
+    mkdirSync(lock);
+    const past = (Date.now() - 60_000) / 1000; // 60 s vanha > stale-raja 100 ms
+    utimesSync(lock, past, past);
+
+    const release = await acquireStateLock(fastEnv({ NM_LOCK_STALE_MS: "100" }));
+    release();
+    expect(existsSync(lock)).toBe(false);
   });
 });
 

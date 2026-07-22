@@ -116,8 +116,14 @@ export function formatAnalysis(
     );
   }
 
+  // Selityslause vain kun vuotoa ON — leak=0-ikkunassa "short, cheap bookings
+  // do not cover their turnover cost" olisi ristiriidassa No leak -otsikon kanssa.
+  const leakClause =
+    a.leak_eur > 0
+      ? `leak totaled ${leakEurTxt(a.leak_eur)} — short, cheap bookings do not cover their turnover cost.`
+      : `leak totaled €0 — no booking sold below its turnover cost.`;
   const summary = worst
-    ? `The portfolio nets ${eur2(a.totals.net_per_available_night)}/night; the biggest improvement potential is in ${worst.property_id} (${eur2(worst.net_per_available_night)}/night), and leak totaled ${leakEurTxt(a.leak_eur)} — short, cheap bookings do not cover their turnover cost.`
+    ? `The portfolio nets ${eur2(a.totals.net_per_available_night)}/night; the biggest improvement potential is in ${worst.property_id} (${eur2(worst.net_per_available_night)}/night), and ${leakClause}`
     : `No bookings fell within the period — check the dates.`;
   parts.push(`**Summary:** ${summary}`);
 

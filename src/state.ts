@@ -120,6 +120,12 @@ const LOCK_RETRY_MS = 100;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
+/** Sisäinen: lukon aikarajat env-yliajettavia (testit) — ei dokumentoitu käyttäjille. */
+function lockMs(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const v = Number(env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
 /**
  * Advisory-lukko rinnakkaisia sessioita vastaan (mkdir on atominen). Suojaa
  * apply/revertin read-modify-write-syklit: ilman lukkoa kaksi sessiota voisi
@@ -129,7 +135,9 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 export async function acquireStateLock(env: NodeJS.ProcessEnv = process.env): Promise<() => void> {
   const lock = join(stateDir(env), ".lock");
-  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  const timeoutMs = lockMs(env, "NM_LOCK_TIMEOUT_MS", LOCK_TIMEOUT_MS);
+  const staleMs = lockMs(env, "NM_LOCK_STALE_MS", LOCK_STALE_MS);
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     try {
       mkdirSync(lock);
@@ -142,7 +150,7 @@ export async function acquireStateLock(env: NodeJS.ProcessEnv = process.env): Pr
       };
     } catch {
       try {
-        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
+        if (Date.now() - statSync(lock).mtimeMs > staleMs) {
           try {
             rmdirSync(lock);
           } catch {

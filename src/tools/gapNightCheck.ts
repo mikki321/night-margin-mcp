@@ -88,6 +88,12 @@ export interface GapNightData {
   costLabel?: string;
   /** Lisähuomautus kustannusriveistä (esim. haun epäonnistuminen). */
   costNote?: string;
+  /**
+   * Tämä päivä (YYYY-MM-DD, UTC) — kun annettu ja tarkasteltava yö on mennyt,
+   * verdiktiin lisätään retrospektiivisyys-huomautus (propose_decisions
+   * kieltäytyy menneistä öistä; tämä tool kertoo asian rehellisesti).
+   */
+  today?: string;
 }
 
 /** Puhdas raportti: ei I/O:ta — kaikki data injektoituna. */
@@ -161,7 +167,15 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
     verdictLine = `${floorPart}. Provide candidate_price (€/night) to get a FILL/SKIP verdict — FILL when price ≥ floor.`;
   }
 
-  return [header, sourceLine, verdictLine].join("\n");
+  // Mennyt yö: verdikti ei ole toimintakelpoinen — sama tulevaisuussääntö
+  // kuin propose_decisionsissa, mutta raportti annetaan retrospektiivisenä.
+  const lines = [header, sourceLine, verdictLine];
+  if (data.today !== undefined && date < data.today) {
+    lines.push(
+      `Note: this night is in the past — the verdict is retrospective only; pricing decisions apply to future nights.`,
+    );
+  }
+  return lines.join("\n");
 }
 
 export interface GapNightArgs {
@@ -180,6 +194,7 @@ export interface GapNightArgs {
 export async function runGapNightCheck(
   args: GapNightArgs,
   env: NodeJS.ProcessEnv = process.env,
+  now: Date = new Date(),
 ): Promise<string> {
   const { from, to } = checkWindow(args.date);
   const reservationSource = reservationSourceFromEnv(env);
@@ -225,5 +240,8 @@ export async function runGapNightCheck(
     whKeyPresent: Boolean(env.WHEELHOUSE_API_KEY?.trim()),
     costLabel,
     costNote,
+    today: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      .toISOString()
+      .slice(0, 10),
   });
 }

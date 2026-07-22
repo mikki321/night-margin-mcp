@@ -22,6 +22,7 @@ import {
 import { WheelhouseClient, type WhListing } from "../wheelhouse/client.js";
 import {
   type Decision,
+  acquireStateLock,
   nextDecisionIdNumber,
   readDecisions,
   writeDecisions,
@@ -96,6 +97,24 @@ function formatRecRange(p: GapFloorProposal): string {
   return p.rec_min === p.rec_max ? eur(p.rec_min) : `${eur(p.rec_min)}–${eur(p.rec_max)}`;
 }
 
+/** Tiivis id-lista: peräkkäiset numerot rangeksi — "d1, d2, d3, d7" → "d1–d3, d7". */
+export function formatIdRanges(ids: string[]): string {
+  const nums = ids
+    .map((id) => /^d(\d+)$/.exec(id))
+    .filter((m): m is RegExpExecArray => m !== null)
+    .map((m) => Number(m[1]))
+    .sort((a, b) => a - b);
+  const other = ids.filter((id) => !/^d\d+$/.test(id));
+  const parts: string[] = [];
+  for (let i = 0; i < nums.length; ) {
+    let j = i;
+    while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) j++;
+    parts.push(j > i ? `d${nums[i]}–d${nums[j]}` : `d${nums[i]}`);
+    i = j + 1;
+  }
+  return [...parts, ...other].join(", ");
+}
+
 /**
  * Ehdottaa aukkoyölattia-päätöksiä ja tallentaa ne decisions.json:iin
  * (status "proposed"; saman ikkunan vanhat proposed-rivit korvataan).
@@ -148,7 +167,44 @@ export async function runProposeDecisions(
   const costSource = costSourceFromEnv(env);
   const { costs } = await resolveCosts(costSource, reservations, from, to, avgFallbackFromEnv(env));
   const gaps = gapNightsByProperty(reservations, from, to);
-  const totalGapNights = [...gaps.values()].reduce((acc, d) => acc + d.length, 0);
+
+  // Löydös: applied-päätöksen kattamat yöt suljetaan pois uusista ehdotuksista.
+  // Päällekkäinen päätös samoille öille snapshottaisi TYÖKALUN OMAN lattiahinnan
+  // "aiempana tilana" → väärässä järjestyksessä tehty revert kirjoittaisi sen
+  // takaisin. Revert ensin, propose sitten.
+  const priorLog = readDecisions(env);
+  const appliedNights = new Map<string, Set<string>>();
+  for (const d of priorLog) {
+    if (d.status !== "applied") continue;
+    for (const night of d.dates) {
+      if (night < from || night >= to) continue;
+      let set = appliedNights.get(d.property_id);
+      if (!set) appliedNights.set(d.property_id, (set = new Set()));
+      set.add(night);
+    }
+  }
+  const gapSetByProperty = new Map([...gaps].map(([p, ds]) => [p, new Set(ds)] as const));
+  let excludedGapNights = 0;
+  for (const [propertyId, gapSet] of gapSetByProperty) {
+    const set = appliedNights.get(propertyId);
+    if (!set) continue;
+    for (const night of set) if (gapSet.has(night)) excludedGapNights++;
+  }
+  const overlappingAppliedIds: string[] = [];
+  if (excludedGapNights > 0) {
+    for (const d of priorLog) {
+      if (d.status !== "applied") continue;
+      const gapSet = gapSetByProperty.get(d.property_id);
+      if (gapSet && d.dates.some((dt) => dt >= from && dt < to && gapSet.has(dt))) {
+        overlappingAppliedIds.push(d.id);
+      }
+    }
+  }
+
+  // Aukkoyötilastot ilman applied-katettuja öitä — viestit eivät saa väittää
+  // että poissuljetut yöt olisi verrattu lattiaan.
+  const totalGapNights =
+    [...gaps.values()].reduce((acc, d) => acc + d.length, 0) - excludedGapNights;
 
   // Hinnat per kohde: WH-suositukset avaimella; mock-tilassa kohteen ADR-estimaatti.
   const priceRecsByProperty = new Map<string, NightPrice[]>();
@@ -194,11 +250,19 @@ export async function runProposeDecisions(
   }
 
   // Löydös 6: yöt ilman hintadataa ohitetaan lattiavertailusta — "ei ehdotuksia"
-  // -viesti ei saa yliväittää. M = hinnalliset aukkoyöt, N = kaikki aukkoyöt.
+  // -viesti ei saa yliväittää. M = hinnalliset aukkoyöt, N = kaikki aukkoyöt
+  // (kummastakin on jo poistettu applied-päätösten kattamat yöt).
   let pricedGapNights = 0;
   for (const [propertyId, gapDates] of gaps) {
     const priced = new Set((priceRecsByProperty.get(propertyId) ?? []).map((p) => p.stay_date));
-    pricedGapNights += gapDates.filter((d) => priced.has(d)).length;
+    const excluded = appliedNights.get(propertyId);
+    pricedGapNights += gapDates.filter((d) => priced.has(d) && !excluded?.has(d)).length;
+  }
+
+  if (excludedGapNights > 0) {
+    priceNotes.push(
+      `${excludedGapNights} gap night${excludedGapNights === 1 ? " is" : "s are"} already covered by applied decision${overlappingAppliedIds.length === 1 ? "" : "s"} ${formatIdRanges(overlappingAppliedIds)} — excluded from proposals (revert first to re-propose)`,
+    );
   }
 
   const proposals = proposeGapFloorDecisions({
@@ -208,40 +272,52 @@ export async function runProposeDecisions(
     from,
     to,
     minMargin: minMarginFromEnv(env),
+    excludeNights: appliedNights,
   });
 
-  // Talleta: saman ikkunan vanhat proposed-rivit korvataan; id:t juoksevat koko lokin yli.
-  const existing = readDecisions(env);
-  let nextId = nextDecisionIdNumber(existing);
-  const kept = existing.filter(
-    (d) =>
-      !(d.status === "proposed" && d.type === "gap_floor" && d.dates.some((dt) => dt >= from && dt < to)),
-  );
-  const createdAt = new Date().toISOString();
-  const newDecisions: Decision[] = proposals.map((p) => {
-    const listing = listingByProperty.get(p.property_id);
-    return {
-      id: `d${nextId++}`,
-      created_at: createdAt,
-      type: "gap_floor",
-      property_id: p.property_id,
-      listing_id: listing ? listing.id : "mock",
-      // KIRJOITUSkanava = listingin OMA channel-kenttä ILMAN env-yliajoa
-      // (turvasääntö 5: ei koskaan kirjoituksia muulle kuin listingin omalle
-      // kanavalle; WHEELHOUSE_CHANNEL vaikuttaa vain lukuihin).
-      channel: listing ? channelForListing(listing) : "mock",
-      currency: listing?.currency?.trim() || "EUR",
-      dates: p.dates,
-      floor_price: p.floor_price,
-      wh_recommended_price: p.rec_min,
-      expected: {
-        protected_nights: p.protected_nights,
-        floor_vs_rec_delta: Math.round(p.floor_vs_rec_delta),
-      },
-      status: "proposed",
-    };
-  });
-  writeDecisions([...kept, ...newDecisions], env);
+  // Talleta LUKON ALLA (rinnakkainen sessio voisi muuten hävittää välissä
+  // tehdyt apply/propose-kirjoitukset — read-modify-write ei ole atominen):
+  // saman ikkunan vanhat proposed-rivit korvataan; id:t juoksevat koko lokin yli.
+  const release = await acquireStateLock(env);
+  const replacedIds: string[] = [];
+  let newDecisions: Decision[];
+  try {
+    const existing = readDecisions(env);
+    let nextId = nextDecisionIdNumber(existing);
+    const kept = existing.filter((d) => {
+      const replaced =
+        d.status === "proposed" && d.type === "gap_floor" && d.dates.some((dt) => dt >= from && dt < to);
+      if (replaced) replacedIds.push(d.id);
+      return !replaced;
+    });
+    const createdAt = new Date().toISOString();
+    newDecisions = proposals.map((p) => {
+      const listing = listingByProperty.get(p.property_id);
+      return {
+        id: `d${nextId++}`,
+        created_at: createdAt,
+        type: "gap_floor",
+        property_id: p.property_id,
+        listing_id: listing ? listing.id : "mock",
+        // KIRJOITUSkanava = listingin OMA channel-kenttä ILMAN env-yliajoa
+        // (turvasääntö 5: ei koskaan kirjoituksia muulle kuin listingin omalle
+        // kanavalle; WHEELHOUSE_CHANNEL vaikuttaa vain lukuihin).
+        channel: listing ? channelForListing(listing) : "mock",
+        currency: listing?.currency?.trim() || "EUR",
+        dates: p.dates,
+        floor_price: p.floor_price,
+        wh_recommended_price: p.rec_min,
+        expected: {
+          protected_nights: p.protected_nights,
+          floor_vs_rec_delta: Math.round(p.floor_vs_rec_delta),
+        },
+        status: "proposed",
+      };
+    });
+    writeDecisions([...kept, ...newDecisions], env);
+  } finally {
+    release();
+  }
 
   // Tuloste
   const parts: string[] = [];
@@ -255,9 +331,24 @@ export async function runProposeDecisions(
     ].join("\n"),
   );
 
+  // Löydös 9: vanhojen ehdotusten korvaaminen sanotaan ääneen — käyttäjän
+  // (tai aiemman viestin) hallussa olevat id:t eivät enää kelpaa.
+  if (replacedIds.length > 0) {
+    parts.push(
+      `Replaced ${replacedIds.length} earlier proposal${replacedIds.length === 1 ? "" : "s"} for this window — ` +
+        `${formatIdRanges(replacedIds)} ${replacedIds.length === 1 ? "is" : "are"} no longer valid` +
+        `${proposals.length > 0 ? "; use the new ids below" : ""}.`,
+    );
+  }
+
   if (proposals.length === 0) {
     let message: string;
-    if (totalGapNights === 0) {
+    if (totalGapNights === 0 && excludedGapNights > 0) {
+      message =
+        `No proposals — all ${excludedGapNights} gap night${excludedGapNights === 1 ? "" : "s"} in the window ` +
+        `${excludedGapNights === 1 ? "is" : "are"} already covered by applied decision${overlappingAppliedIds.length === 1 ? "" : "s"} ` +
+        `${formatIdRanges(overlappingAppliedIds)}. Revert ${overlappingAppliedIds.length === 1 ? "it" : "them"} first to re-propose these nights.`;
+    } else if (totalGapNights === 0) {
       message = "No gap nights in the window — nothing to propose.";
     } else if (pricedGapNights === 0) {
       message = `No proposals — none of the ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window have price data to compare against the cost floor.`;

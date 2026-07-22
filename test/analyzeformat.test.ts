@@ -91,6 +91,31 @@ describe("formatAnalysis — kipu ensin", () => {
     expect(text.match(/Net per available night/g)).toHaveLength(1);
   });
 
+  it("leak = 0: yhteenveto EI väitä että halvat varaukset eivät kata kulujaan (regressio: ristiriita No leak -otsikon kanssa)", () => {
+    const reservations = [res("r1", "p1", "2026-07-01", "2026-07-10", 9, 1500)];
+    const costs = costMap(cost("r1", 70, 10, 10));
+    const a = analyzePortfolio(reservations, costs, FROM, TO);
+    expect(a.leak_eur).toBe(0);
+
+    const text = formatAnalysis(a, "manual (test)", "");
+    expect(text).toContain("**No leak — every booking covers its own turnover cost.**");
+    expect(text).toContain("leak totaled €0 — no booking sold below its turnover cost.");
+    expect(text).not.toContain("do not cover their turnover cost");
+  });
+
+  it("leak > 0: yhteenvedon selityslause säilyy ennallaan", () => {
+    const reservations = [
+      res("r1", "p1", "2026-07-01", "2026-07-05", 4, 400),
+      res("r2", "p1", "2026-07-07", "2026-07-09", 2, 100),
+    ];
+    const costs = costMap(cost("r1", 70, 20, 10), cost("r2", 120));
+    const a = analyzePortfolio(reservations, costs, FROM, TO);
+    expect(a.leak_eur).toBe(20);
+
+    const text = formatAnalysis(a, "manual (test)", "");
+    expect(text).toContain("leak totaled €20 — short, cheap bookings do not cover their turnover cost.");
+  });
+
   it("leak 0 < x < 0.5 € näytetään desimaalilla — ei '€0 is leaking' (löydös 8)", () => {
     // r1 netto −0.3 € → leak 0.3 pyöristyisi eur():llä nollaan
     const reservations = [res("r1", "p1", "2026-07-01", "2026-07-03", 2, 69.7)];

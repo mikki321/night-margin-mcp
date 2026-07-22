@@ -132,6 +132,12 @@ export interface ProposeInputs {
   from: string;
   to: string;
   minMargin: number;
+  /**
+   * Per kohde: yöt joita EI saa ehdottaa (esim. jo applied-tilaisen päätöksen
+   * kattamat yöt) — päällekkäiset päätökset samoille öille rikkoisivat
+   * revert-järjestyksen (jälkimmäisen snapshot = edellisen lattiahinta).
+   */
+  excludeNights?: Map<string, ReadonlySet<string>>;
 }
 
 /**
@@ -164,7 +170,9 @@ export function proposeGapFloorDecisions(inputs: ProposeInputs): GapFloorProposa
     const priceByDate = new Map(
       (inputs.priceRecsByProperty.get(propertyId) ?? []).map((p) => [p.stay_date, p.price]),
     );
+    const excluded = inputs.excludeNights?.get(propertyId);
     const flagged = gapDates.filter((d) => {
+      if (excluded?.has(d)) return false;
       const price = priceByDate.get(d);
       return price !== undefined && price < floorRaw;
     });

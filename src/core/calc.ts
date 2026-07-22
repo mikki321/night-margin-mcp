@@ -11,6 +11,13 @@ const MS_PER_DAY = 86_400_000;
 export function parseISODate(d: string): number {
   const t = Date.parse(`${d}T00:00:00Z`);
   if (Number.isNaN(t)) throw new Error(`Invalid date: "${d}" — use the format YYYY-MM-DD`);
+  // Kalenteritarkistus (round-trip): V8 pyöräyttää esim. 2026-02-30 → 2026-03-02
+  // hiljaa — verdikti laskettaisiin eri yölle kuin käyttäjä kysyi.
+  if (new Date(t).toISOString().slice(0, 10) !== d) {
+    throw new Error(
+      `Invalid date: "${d}" — that day does not exist in the calendar (use the format YYYY-MM-DD)`,
+    );
+  }
   return t;
 }
 
