@@ -420,7 +420,9 @@ describe("apply_decision — confirm=true kirjoittaa, snapshottaa ja verifioi", 
     const d = readDecisions(e)[0];
     expect(d.status).toBe("proposed"); // ei väitetä applied
     expect(d.snapshot!.prior_custom_rates).toEqual([priorRate]); // snapshot ENNEN kirjoitusta
-    expect(d.applied_ranges).toEqual([]);
+    // Uusi käytös: kenttä asetetaan vasta ensimmäisen ONNISTUNEEN PUTin jälkeen
+    // (per-PUT-persistointi) — puuttuva kenttä ja tyhjä lista tarkoittavat samaa.
+    expect(d.applied_ranges ?? []).toEqual([]);
   });
 
   it("osittainen kirjoitusvirhe → uusintayritys EI ylikirjoita snapshotia, revert palauttaa alkuperäisen tilan", async () => {

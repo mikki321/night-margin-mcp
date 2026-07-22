@@ -6,7 +6,15 @@
  * hakemistossa), jotta keskeytynyt kirjoitus ei koskaan korruptoi lokia.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -104,6 +112,56 @@ export function readTargets(env: NodeJS.ProcessEnv = process.env): Target[] {
 
 export function writeTargets(targets: Target[], env: NodeJS.ProcessEnv = process.env): void {
   writeJsonAtomic(join(stateDir(env), TARGETS_FILE), targets);
+}
+
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_STALE_MS = 120_000;
+const LOCK_RETRY_MS = 100;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * Advisory-lukko rinnakkaisia sessioita vastaan (mkdir on atominen). Suojaa
+ * apply/revertin read-modify-write-syklit: ilman lukkoa kaksi sessiota voisi
+ * hävittää toistensa kirjoitukset tai pahimmillaan ottaa snapshotin toisen
+ * session jo kirjoittamista lattiahinnoista. Kaatuneen prosessin lukko
+ * siivotaan iän perusteella (stale > 2 min).
+ */
+export async function acquireStateLock(env: NodeJS.ProcessEnv = process.env): Promise<() => void> {
+  const lock = join(stateDir(env), ".lock");
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      return () => {
+        try {
+          rmdirSync(lock);
+        } catch {
+          /* jo vapautettu */
+        }
+      };
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > LOCK_STALE_MS) {
+          try {
+            rmdirSync(lock);
+          } catch {
+            /* toinen sessio ehti siivota */
+          }
+          continue;
+        }
+      } catch {
+        continue; // lukko ehti kadota — yritä heti uudelleen
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `The decision log is locked by another night-margin session (${lock}). ` +
+            "Wait for it to finish, or delete the .lock directory if no other session is running.",
+        );
+      }
+      await sleep(LOCK_RETRY_MS);
+    }
+  }
 }
 
 /** Seuraava juokseva päätös-id koko lokin yli (myös applied/reverted) — id:tä ei uudelleenkäytetä. */

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { datesToRanges } from "../core/decisions.js";
-import { readDecisions, writeDecisions } from "../state.js";
+import { acquireStateLock, readDecisions, writeDecisions } from "../state.js";
 import {
   CUSTOM_RATE_WEEKDAYS,
   type WhCustomRate,
@@ -111,61 +111,92 @@ export async function runRevertDecision(
   const client =
     deps.client ?? new WheelhouseClient({ apiKey: key!, baseUrl: env.WHEELHOUSE_API_URL });
 
-  // 1) DELETE kirjoitetut rangeat. 404 = range jo poissa → lasketaan poistetuksi.
-  const deleted: string[] = [];
-  for (const range of ranges) {
-    try {
-      await client.deleteCustomRates(
-        decision.listing_id,
-        decision.channel,
-        range.start_date,
-        range.end_date,
-      );
-      deleted.push(`${range.start_date} → ${range.end_date}`);
-    } catch (e) {
-      if (e instanceof WheelhouseHttpError && e.status === 404) {
-        deleted.push(`${range.start_date} → ${range.end_date} (was already gone)`);
+  // Lukko koko peruutuspolun ajaksi + tuore tila lukon alla (sama syy kuin applyssä).
+  const release = await acquireStateLock(env);
+  try {
+    const freshDecisions = readDecisions(env);
+    const fresh = freshDecisions.find((d) => d.id === args.decision_id);
+    if (!fresh) {
+      throw new Error(`Decision "${args.decision_id}" disappeared from the decision log — nothing reverted.`);
+    }
+    if (fresh.status === "reverted") {
+      return `Decision ${fresh.id} was already reverted at ${fresh.reverted_at ?? "an earlier time"} — nothing to do.`;
+    }
+
+    // 1) DELETE kirjoitetut rangeat. 404 = range jo poissa → lasketaan poistetuksi.
+    const deleted: string[] = [];
+    for (const range of ranges) {
+      try {
+        await client.deleteCustomRates(
+          fresh.listing_id,
+          fresh.channel,
+          range.start_date,
+          range.end_date,
+        );
+        deleted.push(`${range.start_date} → ${range.end_date}`);
+      } catch (e) {
+        if (e instanceof WheelhouseHttpError && e.status === 404) {
+          deleted.push(`${range.start_date} → ${range.end_date} (was already gone)`);
+          continue;
+        }
+        throw new Error(
+          `Delete failed after ${deleted.length} of ${ranges.length} range${ranges.length === 1 ? "" : "s"}: ${(e as Error).message}. ` +
+            (deleted.length > 0 ? `Deleted so far: ${deleted.join(", ")}. ` : "") +
+            `Re-run revert_decision {"decision_id": "${fresh.id}", "confirm": true} to finish.`,
+        );
+      }
+    }
+
+    // 2) Palauta snapshotin aiemmat ratet kirjoitettujen rangejen kohdalta.
+    const restored: string[] = [];
+    const restoreNotes: string[] = [];
+    let restoreFailures = 0;
+    for (const rate of priorRates) {
+      const body = restoreBodyFromSnapshot(rate);
+      if (!body) {
+        restoreNotes.push("one snapshot entry was missing start/end dates — skipped");
         continue;
       }
-      throw new Error(
-        `Delete failed after ${deleted.length} of ${ranges.length} range${ranges.length === 1 ? "" : "s"}: ${(e as Error).message}. ` +
-          (deleted.length > 0 ? `Deleted so far: ${deleted.join(", ")}. ` : "") +
-          `Re-run revert_decision {"decision_id": "${decision.id}", "confirm": true} to finish.`,
-      );
+      try {
+        await client.putCustomRateBody(fresh.listing_id, fresh.channel, body);
+        restored.push(`${rate.start_date} → ${rate.end_date}`);
+      } catch (e) {
+        restoreFailures++;
+        restoreNotes.push(
+          `failed to restore prior rate ${rate.start_date} → ${rate.end_date} (${(e as Error).message})`,
+        );
+      }
     }
+
+    // 3) Status + loki. "reverted" VAIN jos kaikki palautukset onnistuivat —
+    //    muuten status säilyy ja revertin voi ajaa uudelleen (deletet sietävät
+    //    404:n, palautukset ovat idempotentteja upsertteja).
+    if (restoreFailures === 0) {
+      fresh.status = "reverted";
+      fresh.reverted_at = new Date().toISOString();
+      writeDecisions(freshDecisions, env);
+    }
+
+    return [
+      restoreFailures === 0
+        ? `## Reverted decision ${fresh.id} — ${fresh.property_id}`
+        : `## Partially reverted decision ${fresh.id} — ${fresh.property_id}`,
+      `Deleted ${deleted.length} custom rate range${deleted.length === 1 ? "" : "s"} from listing ${fresh.listing_id} (channel ${fresh.channel}):`,
+      deleted.map((d) => `- ${d}`).join("\n"),
+      restored.length > 0
+        ? `Restored ${restored.length} prior custom rate${restored.length === 1 ? "" : "s"} from the snapshot:\n${restored.map((r) => `- ${r}`).join("\n")}`
+        : priorRates.length === 0
+          ? "No prior custom rates to restore — Wheelhouse recommendations take over these nights again."
+          : "No prior custom rates were restored yet.",
+      ...(restoreNotes.length > 0 ? [`Notes: ${restoreNotes.join(" · ")}`] : []),
+      ...(restoreFailures > 0
+        ? [
+            `${restoreFailures} prior rate${restoreFailures === 1 ? "" : "s"} could not be restored, so the decision is still marked "${fresh.status}". ` +
+              `Re-run revert_decision {"decision_id": "${fresh.id}", "confirm": true} to retry the restore.`,
+          ]
+        : []),
+    ].join("\n\n");
+  } finally {
+    release();
   }
-
-  // 2) Palauta snapshotin aiemmat ratet kirjoitettujen rangejen kohdalta.
-  const restored: string[] = [];
-  const restoreNotes: string[] = [];
-  for (const rate of priorRates) {
-    const body = restoreBodyFromSnapshot(rate);
-    if (!body) {
-      restoreNotes.push("one snapshot entry was missing start/end dates — skipped");
-      continue;
-    }
-    try {
-      await client.putCustomRateBody(decision.listing_id, decision.channel, body);
-      restored.push(`${rate.start_date} → ${rate.end_date}`);
-    } catch (e) {
-      restoreNotes.push(
-        `failed to restore prior rate ${rate.start_date} → ${rate.end_date} (${(e as Error).message}) — set it manually in Wheelhouse if needed`,
-      );
-    }
-  }
-
-  // 3) Status + loki.
-  decision.status = "reverted";
-  decision.reverted_at = new Date().toISOString();
-  writeDecisions(decisions, env);
-
-  return [
-    `## Reverted decision ${decision.id} — ${decision.property_id}`,
-    `Deleted ${deleted.length} custom rate range${deleted.length === 1 ? "" : "s"} from listing ${decision.listing_id} (channel ${decision.channel}):`,
-    deleted.map((d) => `- ${d}`).join("\n"),
-    restored.length > 0
-      ? `Restored ${restored.length} prior custom rate${restored.length === 1 ? "" : "s"} from the snapshot:\n${restored.map((r) => `- ${r}`).join("\n")}`
-      : "No prior custom rates to restore — Wheelhouse recommendations take over these nights again.",
-    ...(restoreNotes.length > 0 ? [`Notes: ${restoreNotes.join(" · ")}`] : []),
-  ].join("\n\n");
 }

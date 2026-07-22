@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { datesToRanges } from "../core/decisions.js";
-import { type Decision, readDecisions, writeDecisions } from "../state.js";
+import { type Decision, acquireStateLock, readDecisions, writeDecisions } from "../state.js";
 import { CUSTOM_RATE_WEEKDAYS, WheelhouseClient } from "../wheelhouse/client.js";
 
 const eur = (n: number): string => {
@@ -153,68 +153,93 @@ export async function runApplyDecision(
   const client =
     deps.client ?? new WheelhouseClient({ apiKey: key!, baseUrl: env.WHEELHOUSE_API_URL });
 
-  // 1) Snapshot aiemmasta tilasta päätöslokiin ENNEN kirjoitusta (turvasääntö 3) —
-  //    VAIN jos snapshotia ei jo ole: uusintayritys osittaisen kirjoitusvirheen
-  //    jälkeen ei saa ylikirjoittaa aitoa aiempaa tilaa työkalun omilla
-  //    lattiahinnoilla (revert palauttaisi silloin väärän tilan).
-  if (!decision.snapshot) {
-    const prior = await client.getCustomRates(decision.listing_id, decision.channel);
-    decision.snapshot = { prior_custom_rates: prior };
-    writeDecisions(decisions, env);
-  }
-
-  // 2) Kirjoitukset sarjassa; virhe kesken → kerro mitkä menivät läpi ja miten perutaan.
-  const written: { start_date: string; end_date: string }[] = [];
+  // Lukko koko kirjoituspolun ajaksi: rinnakkainen sessio ei voi lomittaa omia
+  // kirjoituksiaan väliin eikä snapshotoida meidän lattiahintojamme "aiempana
+  // tilana". Tuore tila luetaan lukon alla uudelleen.
+  const release = await acquireStateLock(env);
   try {
-    for (const range of ranges) {
-      await client.putCustomRate(decision.listing_id, decision.channel, {
-        start_date: range.start_date,
-        end_date: range.end_date,
-        price: decision.floor_price,
-        currency,
-      });
-      written.push(range);
+    const freshDecisions = readDecisions(env);
+    const fresh = findDecision(freshDecisions, args.decision_id);
+    if (fresh.status === "applied") {
+      return (
+        `Decision ${fresh.id} was already applied at ${fresh.applied_at ?? "an earlier time"} — nothing to do. ` +
+        `Undo it with: revert_decision {"decision_id": "${fresh.id}", "confirm": true}`
+      );
     }
-  } catch (e) {
-    decision.applied_ranges = written;
-    writeDecisions(decisions, env);
-    const progress =
-      written.length > 0
-        ? `Ranges already written: ${written.map((r) => `${r.start_date}→${r.end_date}`).join(", ")}. ` +
-          `Roll them back with: revert_decision {"decision_id": "${decision.id}", "confirm": true}`
-        : "Nothing was written — it is safe to retry apply_decision.";
-    throw new Error(
-      `Write failed after ${written.length} of ${ranges.length} range${ranges.length === 1 ? "" : "s"}: ${(e as Error).message}. ${progress}`,
-    );
+    if (fresh.status === "reverted") {
+      return (
+        `Decision ${fresh.id} was applied and then reverted at ${fresh.reverted_at ?? "an earlier time"}. ` +
+        `Run propose_decisions again for fresh proposals.`
+      );
+    }
+
+    // 1) Snapshot aiemmasta tilasta päätöslokiin ENNEN kirjoitusta (turvasääntö 3) —
+    //    VAIN jos snapshotia ei jo ole: uusintayritys osittaisen kirjoitusvirheen
+    //    jälkeen ei saa ylikirjoittaa aitoa aiempaa tilaa työkalun omilla
+    //    lattiahinnoilla (revert palauttaisi silloin väärän tilan).
+    if (!fresh.snapshot) {
+      const prior = await client.getCustomRates(fresh.listing_id, fresh.channel);
+      fresh.snapshot = { prior_custom_rates: prior };
+      writeDecisions(freshDecisions, env);
+    }
+
+    // 2) Kirjoitukset sarjassa. Jokainen onnistunut PUT persistoidaan HETI —
+    //    prosessin kaatuminen kesken loopin ei saa jättää lokia luulemaan
+    //    ettei mitään kirjoitettu.
+    const written: { start_date: string; end_date: string }[] = [];
+    try {
+      for (const range of ranges) {
+        await client.putCustomRate(fresh.listing_id, fresh.channel, {
+          start_date: range.start_date,
+          end_date: range.end_date,
+          price: fresh.floor_price,
+          currency,
+        });
+        written.push(range);
+        fresh.applied_ranges = [...written];
+        writeDecisions(freshDecisions, env);
+      }
+    } catch (e) {
+      const progress =
+        written.length > 0
+          ? `Ranges already written: ${written.map((r) => `${r.start_date}→${r.end_date}`).join(", ")}. ` +
+            `Roll them back with: revert_decision {"decision_id": "${fresh.id}", "confirm": true}`
+          : "Nothing was written — it is safe to retry apply_decision.";
+      throw new Error(
+        `Write failed after ${written.length} of ${ranges.length} range${ranges.length === 1 ? "" : "s"}: ${(e as Error).message}. ${progress}`,
+      );
+    }
+
+    // 3) Verifiointi: GET ja tarkista että kirjoitetut rangeat näkyvät.
+    let verifyNote: string;
+    try {
+      const after = await client.getCustomRates(fresh.listing_id, fresh.channel);
+      const visible = ranges.filter((range) =>
+        after.some((cr) => cr.start_date === range.start_date && cr.end_date === range.end_date),
+      );
+      verifyNote =
+        visible.length === ranges.length
+          ? `Verified: ${visible.length}/${ranges.length} written range${ranges.length === 1 ? "" : "s"} visible in Wheelhouse.`
+          : `Warning: only ${visible.length}/${ranges.length} written ranges are visible in Wheelhouse — check the listing in the Wheelhouse UI.`;
+    } catch (e) {
+      verifyNote = `Verification read failed (${(e as Error).message}) — the writes themselves succeeded.`;
+    }
+
+    // 4) Status + loki.
+    fresh.status = "applied";
+    fresh.applied_at = new Date().toISOString();
+    fresh.applied_ranges = written;
+    writeDecisions(freshDecisions, env);
+
+    return [
+      `## Applied decision ${fresh.id} — ${fresh.property_id}`,
+      `Wrote ${written.length} custom rate range${written.length === 1 ? "" : "s"} at ${eur(fresh.floor_price)}/night (${currency}) to listing ${fresh.listing_id} on channel ${fresh.channel}:`,
+      written.map((r) => `- ${r.start_date} → ${r.end_date}`).join("\n"),
+      verifyNote,
+      `${fresh.dates.length} night${fresh.dates.length === 1 ? "" : "s"} now priced at your cost floor instead of below it. ` +
+        `Undo anytime with: revert_decision {"decision_id": "${fresh.id}", "confirm": true}`,
+    ].join("\n\n");
+  } finally {
+    release();
   }
-
-  // 3) Verifiointi: GET ja tarkista että kirjoitetut rangeat näkyvät.
-  let verifyNote: string;
-  try {
-    const after = await client.getCustomRates(decision.listing_id, decision.channel);
-    const visible = ranges.filter((range) =>
-      after.some((cr) => cr.start_date === range.start_date && cr.end_date === range.end_date),
-    );
-    verifyNote =
-      visible.length === ranges.length
-        ? `Verified: ${visible.length}/${ranges.length} written range${ranges.length === 1 ? "" : "s"} visible in Wheelhouse.`
-        : `Warning: only ${visible.length}/${ranges.length} written ranges are visible in Wheelhouse — check the listing in the Wheelhouse UI.`;
-  } catch (e) {
-    verifyNote = `Verification read failed (${(e as Error).message}) — the writes themselves succeeded.`;
-  }
-
-  // 4) Status + loki.
-  decision.status = "applied";
-  decision.applied_at = new Date().toISOString();
-  decision.applied_ranges = written;
-  writeDecisions(decisions, env);
-
-  return [
-    `## Applied decision ${decision.id} — ${decision.property_id}`,
-    `Wrote ${written.length} custom rate range${written.length === 1 ? "" : "s"} at ${eur(decision.floor_price)}/night (${currency}) to listing ${decision.listing_id} on channel ${decision.channel}:`,
-    written.map((r) => `- ${r.start_date} → ${r.end_date}`).join("\n"),
-    verifyNote,
-    `${decision.dates.length} night${decision.dates.length === 1 ? "" : "s"} now priced at your cost floor instead of below it. ` +
-      `Undo anytime with: revert_decision {"decision_id": "${decision.id}", "confirm": true}`,
-  ].join("\n\n");
 }
