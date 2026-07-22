@@ -1,5 +1,5 @@
 {
- "generated_at": "2026-07-21T21:38:10.808Z",
+ "generated_at": "2026-07-22T06:53:22.590Z",
  "window": {
   "from": "2026-06-01",
   "to": "2026-09-01"
@@ -7,7 +7,7 @@
  "sources": {
   "reservations": "synthetic demo data (set WHEELHOUSE_API_KEY to analyze your own portfolio)",
   "costs": "csv (examples/sample-costs.csv, 887 rows)",
-  "attribution": "Cost attribution: 224 id"
+  "attribution": "Cost attribution: 224/224 bookings matched by reservation_id"
  },
  "analysis": {
   "from": "2026-06-01",
