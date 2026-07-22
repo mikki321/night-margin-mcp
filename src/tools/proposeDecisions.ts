@@ -7,6 +7,7 @@ import {
   gapNightsByProperty,
   proposeGapFloorDecisions,
 } from "../core/decisions.js";
+import { DEFAULT_RISK_PRESET, type RiskPreset, riskAdjustedMargin } from "../core/risk.js";
 import type { Reservation } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
 import {
@@ -51,6 +52,13 @@ export const proposeDecisionsInputSchema = {
     .string()
     .optional()
     .describe("Window end (exclusive), YYYY-MM-DD (optional — defaults to 30 days from the start)"),
+  risk: z
+    .enum(["conservative", "recommended", "aggressive"])
+    .optional()
+    .describe(
+      "Risk preset for the gap-night floor's minimum margin (Wheelhouse's own CON/REC/AGG language): " +
+        "conservative doubles MIN_MARGIN, recommended keeps it as configured (default), aggressive uses 40% of it.",
+    ),
 };
 
 export interface ProposeWindow {
@@ -78,6 +86,7 @@ export function proposeWindow(from?: string, to?: string, now: Date = new Date()
 export interface ProposeArgs {
   from?: string;
   to?: string;
+  risk?: RiskPreset;
 }
 
 /** Injektoitavat riippuvuudet testejä varten — tuotannossa rakennetaan env:stä. */
@@ -115,17 +124,44 @@ export function formatIdRanges(ids: string[]): string {
   return [...parts, ...other].join(", ");
 }
 
+export interface GapFloorGatherResult {
+  from: string;
+  to: string;
+  isDefault: boolean;
+  clampNote: string;
+  /**
+   * Asetettu kun mitään ei voitu arvioida (ikkuna kokonaan menneisyydessä, tai
+   * ei varauksia ikkunassa) — proposals on tyhjä eikä kustannus-/hintadataa
+   * haettu. Kutsuja päättää oman viestinsä (propose_decisions ja check_alerts
+   * sanovat tämän eri sanoin).
+   */
+  blocked?: "entirely-past" | "no-reservations";
+  reservations: Reservation[];
+  costSourceLabel: string;
+  reservationSourceLabel: string;
+  priceLabel: string;
+  priceNotes: string[];
+  totalGapNights: number;
+  pricedGapNights: number;
+  excludedGapNights: number;
+  overlappingAppliedIds: string[];
+  proposals: GapFloorProposal[];
+  listingByProperty: Map<string, WhListing>;
+}
+
 /**
- * Ehdottaa aukkoyölattia-päätöksiä ja tallentaa ne decisions.json:iin
- * (status "proposed"; saman ikkunan vanhat proposed-rivit korvataan).
- * WH-avaimella hinnat = Wheelhousen price_recommendations; ilman avainta
- * (mock-tila) verrataan lattiaa kohteen keskimääräiseen listahintaan.
+ * Hakee aukkoyölattia-ehdotukset ikkunalle: ratkaisee ikkunan, hakee
+ * varaukset + kustannukset + hintadatan ja ajaa ydinlaskennan. EI koske
+ * päätöslokin PYSYVIIN riveihin (lukee vain applied-päätökset poissulkua
+ * varten, kuten ennenkin) — jaettu propose_decisionsin (joka tallentaa
+ * tuloksen) ja check_alertsin (joka vain laskee ne, read-only) kesken.
  */
-export async function runProposeDecisions(
+export async function gatherGapFloorProposals(
   args: ProposeArgs,
-  env: NodeJS.ProcessEnv = process.env,
-  deps: ProposeDeps = {},
-): Promise<string> {
+  env: NodeJS.ProcessEnv,
+  deps: ProposeDeps,
+  minMargin: number,
+): Promise<GapFloorGatherResult> {
   const now = deps.now ?? new Date();
   const today = utcTodayIso(now);
   const resolved = proposeWindow(args.from, args.to, now);
@@ -136,10 +172,24 @@ export async function runProposeDecisions(
   let clampNote = "";
   if (from < today) {
     if (to <= today) {
-      return (
-        `The window ${from} → ${to} is entirely in the past — pricing decisions apply to future nights. ` +
-        `Try propose_decisions without arguments for the next ${PROPOSE_WINDOW_DAYS} days.`
-      );
+      return {
+        from,
+        to,
+        isDefault,
+        clampNote: "",
+        blocked: "entirely-past",
+        reservations: [],
+        costSourceLabel: "",
+        reservationSourceLabel: "",
+        priceLabel: "",
+        priceNotes: [],
+        totalGapNights: 0,
+        pricedGapNights: 0,
+        excludedGapNights: 0,
+        overlappingAppliedIds: [],
+        proposals: [],
+        listingByProperty: new Map(),
+      };
     }
     clampNote = ` (start clamped from ${from} to today — decisions apply to future nights)`;
     from = today;
@@ -155,13 +205,25 @@ export async function runProposeDecisions(
       : mockReservationSource());
 
   const reservations = await source.getReservations(from, to);
-  const windowLine = `Window: ${from} → ${to}${isDefault ? ` (default: next ${PROPOSE_WINDOW_DAYS} days — pass from/to to change)` : ""}${clampNote}`;
   if (reservations.length === 0) {
-    return [
-      `## Pricing decision proposals`,
-      windowLine,
-      `No reservations found in the window — cannot estimate cost floors or find gap nights. Check the data source and the dates.`,
-    ].join("\n");
+    return {
+      from,
+      to,
+      isDefault,
+      clampNote,
+      blocked: "no-reservations",
+      reservations: [],
+      costSourceLabel: "",
+      reservationSourceLabel: source.label,
+      priceLabel: "",
+      priceNotes: [],
+      totalGapNights: 0,
+      pricedGapNights: 0,
+      excludedGapNights: 0,
+      overlappingAppliedIds: [],
+      proposals: [],
+      listingByProperty: new Map(),
+    };
   }
 
   const costSource = costSourceFromEnv(env);
@@ -271,9 +333,76 @@ export async function runProposeDecisions(
     priceRecsByProperty,
     from,
     to,
-    minMargin: minMarginFromEnv(env),
+    minMargin,
     excludeNights: appliedNights,
   });
+
+  return {
+    from,
+    to,
+    isDefault,
+    clampNote,
+    reservations,
+    costSourceLabel: costSource.label,
+    reservationSourceLabel: source.label,
+    priceLabel,
+    priceNotes,
+    totalGapNights,
+    pricedGapNights,
+    excludedGapNights,
+    overlappingAppliedIds,
+    proposals,
+    listingByProperty,
+  };
+}
+
+/**
+ * Ehdottaa aukkoyölattia-päätöksiä ja tallentaa ne decisions.json:iin
+ * (status "proposed"; saman ikkunan vanhat proposed-rivit korvataan).
+ * WH-avaimella hinnat = Wheelhousen price_recommendations; ilman avainta
+ * (mock-tila) verrataan lattiaa kohteen keskimääräiseen listahintaan.
+ */
+export async function runProposeDecisions(
+  args: ProposeArgs,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: ProposeDeps = {},
+): Promise<string> {
+  const risk: RiskPreset = args.risk ?? DEFAULT_RISK_PRESET;
+  const adjustedMargin = riskAdjustedMargin(minMarginFromEnv(env), risk);
+  const result = await gatherGapFloorProposals(args, env, deps, adjustedMargin);
+
+  if (result.blocked === "entirely-past") {
+    return (
+      `The window ${result.from} → ${result.to} is entirely in the past — pricing decisions apply to future nights. ` +
+      `Try propose_decisions without arguments for the next ${PROPOSE_WINDOW_DAYS} days.`
+    );
+  }
+
+  const windowLine = `Window: ${result.from} → ${result.to}${result.isDefault ? ` (default: next ${PROPOSE_WINDOW_DAYS} days — pass from/to to change)` : ""}${result.clampNote}`;
+  const riskLine = `Floor uses the ${risk} risk preset (margin ${eur(adjustedMargin)}).`;
+
+  if (result.blocked === "no-reservations") {
+    return [
+      `## Pricing decision proposals`,
+      windowLine,
+      `No reservations found in the window — cannot estimate cost floors or find gap nights. Check the data source and the dates.`,
+    ].join("\n");
+  }
+
+  const {
+    from,
+    to,
+    proposals,
+    priceLabel,
+    priceNotes,
+    costSourceLabel,
+    reservationSourceLabel,
+    totalGapNights,
+    pricedGapNights,
+    excludedGapNights,
+    overlappingAppliedIds,
+    listingByProperty,
+  } = result;
 
   // Talleta LUKON ALLA (rinnakkainen sessio voisi muuten hävittää välissä
   // tehdyt apply/propose-kirjoitukset — read-modify-write ei ole atominen):
@@ -325,8 +454,9 @@ export async function runProposeDecisions(
   parts.push(
     [
       windowLine,
+      riskLine,
       `Price basis: ${priceLabel}`,
-      `Cost source: ${costSource.label} · reservations: ${source.label}`,
+      `Cost source: ${costSourceLabel} · reservations: ${reservationSourceLabel}`,
       ...(priceNotes.length > 0 ? [`Notes: ${priceNotes.join(" · ")}`] : []),
     ].join("\n"),
   );

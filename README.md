@@ -1,6 +1,8 @@
 # night-margin-mcp — Margin Engine
 
-An MCP server that shows every pricing decision for a short-term rental portfolio **net of turnover costs**. Wheelhouse optimizes gross revenue (ADR, RevPAR) — this tool tells you what it costs to *produce* a night. The key metric: **net per available night**.
+**Wheelhouse optimizes what guests pay. night-margin protects what you keep.**
+
+An MCP server that shows every pricing decision for a short-term rental portfolio **net of turnover costs** — the margin guard for Wheelhouse pricing, the profit layer underneath its revenue optimization (ADR, RevPAR). The key metric: **net per available night**.
 
 ## Quick start
 
@@ -16,7 +18,7 @@ You'll get the leak figure, the net-per-night metric, and your best and worst pr
 
 ## Example prompts
 
-The server provides seven tools: three read-only analysis tools and a four-tool decision loop (see [The decision loop](#the-decision-loop)). No dates needed — `analyze_portfolio` and `compare_strategies` default to the last 30 + next 90 days (recent turnovers + your booking horizon), `propose_decisions` to the next 30 days; pass `from`/`to` to change. Try these directly in Claude:
+The server provides eight tools: three read-only analysis tools, a four-tool decision loop (see [The decision loop](#the-decision-loop)), and a proactive alerts tool (see [Proactive alerts](#proactive-alerts-watch-mode)). No dates needed — `analyze_portfolio` and `compare_strategies` default to the last 30 + next 90 days (recent turnovers + your booking horizon), `propose_decisions` to the next 30 days; pass `from`/`to` to change. Try these directly in Claude:
 
 1. **`analyze_portfolio`** — where is the money leaking?
    > Where is my portfolio leaking money?
@@ -35,17 +37,42 @@ The server provides seven tools: three read-only analysis tools and a four-tool 
 
    Without explicit confirmation this is a **dry run**: it prints the exact rate payload that *would* be written and changes nothing. Prices change only when you confirm the write, and every applied decision can be undone with `revert_decision`.
 
+6. **Risk presets** — `propose_decisions` and `gap_night_check` both take an optional `risk` parameter (`conservative` | `recommended` | `aggressive`, default `recommended`) that scales the floor's minimum margin — Wheelhouse's own CON/REC/AGG language:
+   > What should I do this week? Use the aggressive risk preset.
+
+7. **`check_alerts`** — proactive check for gap-floor breaches and new bookings (see [Proactive alerts](#proactive-alerts-watch-mode)):
+   > Check for any pricing alerts.
+
 The core message of the demo: **filling gaps at a discount can grow revenue while shrinking profit — a 2-night and a 7-night booking consume the same cleaning.**
 
 ## The decision loop
 
 New in 0.3.0 — analysis turns into safe, reversible action:
 
-1. **`propose_decisions`** finds upcoming gap nights (next 30 days by default) where the current price recommendation sits below your cost floor (turnover + travel + `MIN_MARGIN`) and proposes fixing those nights at the floor so they can't sell below cost. Proposals go into a local decision log — proposing never touches prices.
+1. **`propose_decisions`** finds upcoming gap nights (next 30 days by default) where the current price recommendation sits below your cost floor (turnover + travel + `MIN_MARGIN`, scaled by an optional `risk` preset — see [Example prompts](#example-prompts)) and proposes fixing those nights at the floor so they can't sell below cost. Proposals go into a local decision log — proposing never touches prices.
 2. **`apply_decision`** writes one proposal to Wheelhouse as fixed custom rates — but only with explicit `confirm: true`. The default is a **dry run** showing the exact payload without writing anything. Before the first real write, the prior custom rates are snapshotted to the decision log, so **`revert_decision`** can always delete what was written and restore what was there before.
 3. **`set_target`** stores a monthly gross revenue target per property; `analyze_portfolio` then reports progress toward any targets whose month overlaps the analysis window.
 
 The safety model in one line: the analysis tools (`analyze_portfolio`, `compare_strategies`, `gap_night_check`) and `propose_decisions` never change any prices; writes happen only through `apply_decision`/`revert_decision` with an explicit `confirm: true`, always target the listing's own channel, and every write is revertible. Without a `WHEELHOUSE_API_KEY` you can run the whole loop up to the dry run on demo data — real writes require the key and a fresh propose against your own portfolio. The decision log and targets live locally in `NM_STATE_DIR` (default `~/.night-margin`).
+
+## Proactive alerts (watch mode)
+
+`check_alerts` is read-only and checks two things: (1) upcoming gap nights priced below your cost floor (same data as `propose_decisions`, always the `recommended` risk preset, but this tool never saves proposals to the decision log), and (2) new bookings since the last check, each shown **net of turnover costs** — the same twist as the rest of the server, now in a booking notification. The first run establishes a baseline (records existing bookings without alerting on them); later runs alert only on genuinely new ones.
+
+By default `check_alerts` is silent — it just returns the report as text, same as every other tool. To get pushed notifications, configure a channel:
+
+| Variable | Description |
+|---|---|
+| `NM_TELEGRAM_BOT_TOKEN` / `NM_TELEGRAM_CHAT_ID` | Send alerts via a Telegram bot (checked first). |
+| `NM_WEBHOOK_URL` | Send alerts to a generic incoming webhook (Slack-compatible `{text}` JSON body) — used only if Telegram isn't configured. |
+
+Neither is required — without either, `check_alerts` still works and simply says no channel is configured. **Notifications are off unless you set one of these** — nothing is ever sent by default, and the token/URL are never logged or echoed back in error messages.
+
+For unattended checks (e.g. a daily cron job), run the server with `--watch`: it runs `check_alerts` once (sending a notification if a channel is configured), prints the report to stdout, and exits — no MCP server, no stdio transport:
+
+```bash
+0 8 * * * WHEELHOUSE_API_KEY=... NM_TELEGRAM_BOT_TOKEN=... NM_TELEGRAM_CHAT_ID=... npx -y night-margin-mcp --watch
+```
 
 ## Configuration (env)
 
@@ -64,8 +91,10 @@ claude mcp add margin -e WHEELHOUSE_API_KEY=xxx -e COST_SOURCE=csv -e CSV_PATH=/
 | `COST_TIERS` | – | Optional tiering, e.g. `1br:55,2br:70,3br:95` — matched against the property's `property_id` by substring; everything else gets `AVG_TURNOVER_COST`. |
 | `CSV_PATH` | – | CSV mode: path to the cost CSV (required when `COST_SOURCE=csv`). See [CSV mode](#csv-mode). |
 | `CLEANHUB_API_URL` / `CLEANHUB_TOKEN` | – | CleanHub mode: actual turnover costs from the CleanHub field-operations platform over HTTP (both required when `COST_SOURCE=cleanhub`). |
-| `MIN_MARGIN` | `25` | Minimum margin € for the gap-night floor: floor = turnover + travel + `MIN_MARGIN`. Used in `gap_night_check`'s fill/skip verdict and in `propose_decisions`' floor proposals. |
-| `NM_STATE_DIR` | `~/.night-margin` | Local state directory for the decision log and monthly targets (used by `propose_decisions`, `apply_decision`, `revert_decision`, `set_target`). Nothing is ever stored in the package directory. |
+| `MIN_MARGIN` | `25` | Minimum margin € for the gap-night floor: floor = turnover + travel + `MIN_MARGIN` (scaled by the `risk` preset — see [Example prompts](#example-prompts)). Used in `gap_night_check`'s fill/skip verdict and in `propose_decisions`'/`check_alerts`' floor proposals. |
+| `NM_STATE_DIR` | `~/.night-margin` | Local state directory for the decision log, monthly targets, and the seen-bookings set (used by `propose_decisions`, `apply_decision`, `revert_decision`, `set_target`, `check_alerts`). Nothing is ever stored in the package directory. |
+| `NM_TELEGRAM_BOT_TOKEN` / `NM_TELEGRAM_CHAT_ID` | – | Optional: send `check_alerts` notifications via a Telegram bot. See [Proactive alerts](#proactive-alerts-watch-mode). |
+| `NM_WEBHOOK_URL` | – | Optional: send `check_alerts` notifications to a Slack-compatible incoming webhook (used only if Telegram isn't configured). See [Proactive alerts](#proactive-alerts-watch-mode). |
 
 ## CSV mode
 

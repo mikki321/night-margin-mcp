@@ -1,5 +1,6 @@
 import { avgTurnoverCost, minMargin as minMarginFromEnv } from "../config.js";
 import { gapNightFloor, parseISODate } from "../core/calc.js";
+import { DEFAULT_RISK_PRESET, type RiskPreset, riskAdjustedMargin } from "../core/risk.js";
 import type { Reservation, TurnoverCost } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
@@ -94,6 +95,8 @@ export interface GapNightData {
    * kieltäytyy menneistä öistä; tämä tool kertoo asian rehellisesti).
    */
   today?: string;
+  /** Riskipreseti jolla data.minMargin on jo laskettu — vain tulosterivin merkintää varten (oletus "recommended"). */
+  risk?: RiskPreset;
 }
 
 /** Puhdas raportti: ei I/O:ta — kaikki data injektoituna. */
@@ -167,9 +170,12 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
     verdictLine = `${floorPart}. Provide candidate_price (€/night) to get a FILL/SKIP verdict — FILL when price ≥ floor.`;
   }
 
+  const risk = data.risk ?? DEFAULT_RISK_PRESET;
+  const riskLine = `Floor uses the ${risk} risk preset (margin ${eur(Math.round(data.minMargin))}).`;
+
   // Mennyt yö: verdikti ei ole toimintakelpoinen — sama tulevaisuussääntö
   // kuin propose_decisionsissa, mutta raportti annetaan retrospektiivisenä.
-  const lines = [header, sourceLine, verdictLine];
+  const lines = [header, sourceLine, verdictLine, riskLine];
   if (data.today !== undefined && date < data.today) {
     lines.push(
       `Note: this night is in the past — the verdict is retrospective only; pricing decisions apply to future nights.`,
@@ -182,6 +188,7 @@ export interface GapNightArgs {
   property_id: string;
   date: string;
   candidate_price?: number;
+  risk?: RiskPreset;
 }
 
 /**
@@ -229,17 +236,19 @@ export async function runGapNightCheck(
     }
   }
 
+  const risk = args.risk ?? DEFAULT_RISK_PRESET;
   return gapNightReport(args.property_id, args.date, {
     reservations,
     costRows,
     from,
     to,
-    minMargin: minMarginFromEnv(env),
+    minMargin: riskAdjustedMargin(minMarginFromEnv(env), risk),
     manualAvg: avgTurnoverCost(env),
     candidatePrice: args.candidate_price,
     whKeyPresent: Boolean(env.WHEELHOUSE_API_KEY?.trim()),
     costLabel,
     costNote,
+    risk,
     today: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
       .toISOString()
       .slice(0, 10),

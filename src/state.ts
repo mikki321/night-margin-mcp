@@ -67,6 +67,10 @@ export interface Target {
 
 const DECISIONS_FILE = "decisions.json";
 const TARGETS_FILE = "targets.json";
+const SEEN_BOOKINGS_FILE = "seen_bookings.json";
+
+/** reservation_id → ISO-aikaleima jolloin varaus nähtiin ensi kertaa. Käyttää check_alerts uusien varausten tunnistukseen. */
+export type SeenBookings = Record<string, string>;
 
 /** State-hakemisto: env NM_STATE_DIR tai ~/.night-margin. Luodaan tarvittaessa (700). */
 export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
@@ -112,6 +116,44 @@ export function readTargets(env: NodeJS.ProcessEnv = process.env): Target[] {
 
 export function writeTargets(targets: Target[], env: NodeJS.ProcessEnv = process.env): void {
   writeJsonAtomic(join(stateDir(env), TARGETS_FILE), targets);
+}
+
+function readJsonObject<T extends object>(file: string, what: string): T {
+  if (!existsSync(file)) return {} as T;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new Error(
+      `Failed to read the ${what} (${file}): ${(e as Error).message} — fix or delete the file`,
+    );
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`The ${what} (${file}) must contain a JSON object — fix or delete the file`);
+  }
+  return parsed as T;
+}
+
+/** Puuttuva tiedosto → tyhjä objekti (ei vielä nähtyjä varauksia — ensimmäinen ajo on baseline). */
+export function readSeenBookings(env: NodeJS.ProcessEnv = process.env): SeenBookings {
+  return readJsonObject<SeenBookings>(join(stateDir(env), SEEN_BOOKINGS_FILE), "seen bookings file");
+}
+
+export function writeSeenBookings(seen: SeenBookings, env: NodeJS.ProcessEnv = process.env): void {
+  writeJsonAtomic(join(stateDir(env), SEEN_BOOKINGS_FILE), seen);
+}
+
+/**
+ * Onko seen_bookings.json koskaan kirjoitettu tälle state-hakemistolle —
+ * TIEDOSTON OLEMASSAOLO, ei sisällön tyhjyys. check_alerts käyttää tätä
+ * baseline-tunnistukseen: jos ensimmäinen ajo löytää nolla varausta,
+ * tyhjä-sisältöinen tiedosto silti kirjoitetaan, joten "onko seen tyhjä"
+ * tunnistaisi JOKAISEN myöhemmän ajon baselineksi kunnes ensimmäinen varaus
+ * ilmestyy — se varaus jäisi hiljaa hälyttämättä. Tiedoston olemassaolo ei
+ * kärsi tästä ongelmasta.
+ */
+export function hasSeenBookings(env: NodeJS.ProcessEnv = process.env): boolean {
+  return existsSync(join(stateDir(env), SEEN_BOOKINGS_FILE));
 }
 
 const LOCK_TIMEOUT_MS = 5_000;
