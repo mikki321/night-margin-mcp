@@ -8,7 +8,7 @@
  * takaa että yö myydään).
  */
 
-import { gapNightFloor, overlapNights, parseISODate } from "./calc.js";
+import { nightFloor, nightFloorRaw, overlapNights, parseISODate } from "./calc.js";
 import type { Reservation, TurnoverCost } from "./types.js";
 
 const MS_PER_DAY = 86_400_000;
@@ -109,11 +109,19 @@ export interface GapFloorProposal {
   /** Peräkkäiset yöt (yksi ehdotus per jono). */
   dates: string[];
   /**
-   * Lattiahinta €/yö johon yöt nostettaisiin: gapNightFloor(mediaanivaihto,
-   * mediaanimatka, minMargin) pyöristettynä YLÖS kokonaiseuroon — kirjoitettu
-   * hinta ei koskaan alita lattiaa.
+   * Lattiahinta €/yö johon yöt nostettaisiin: nightFloor(mediaanivaihto,
+   * mediaanimatka, minMargin, min_stay) — raakalattia jaettuna yön min staylla
+   * ja pyöristettynä YLÖS kokonaiseuroon; kirjoitettu hinta ei koskaan alita
+   * lattiaa. Ilman min stay -sääntöä (min_stay = 1) täsmälleen entinen
+   * ceil(gapNightFloor(...)).
    */
   floor_price: number;
+  /**
+   * Näiden öiden yhteinen minimioleskelu (1 = ei sääntöä) — lattia on
+   * amortisoitu tämän yli. Sama kaikille ehdotuksen öille (osa
+   * ryhmittelyavainta), jotta selite ja floor_price pitävät paikkansa.
+   */
+  min_stay: number;
   /** Suositusten haarukka näille öille, €. */
   rec_min: number;
   rec_max: number;
@@ -138,14 +146,24 @@ export interface ProposeInputs {
    * revert-järjestyksen (jälkimmäisen snapshot = edellisen lattiahinta).
    */
   excludeNights?: Map<string, ReadonlySet<string>>;
+  /**
+   * Per kohde: yön voimassa oleva minimioleskelu (vain kokonaisluvut ≥ 2 —
+   * kutsuja normalisoi; puuttuva yö = ei sääntöä = 1). Live-tilassa täytetään
+   * Wheelhousen min_stay_calendarista; mock-tilassa jätetään antamatta →
+   * kaikki lattiat täsmälleen ennallaan.
+   */
+  minStayByProperty?: Map<string, ReadonlyMap<string, number>>;
 }
 
 /**
  * Aukkoyölattia-ehdotukset jaksolle [from, to):
  * - aukkoyöt samalla yömääritelmällä kuin calc.ts (gapNightsByProperty)
- * - lattia per kohde = gapNightFloor(mediaani(cleaning+laundry), mediaani(travel), minMargin)
+ * - lattia per yö = nightFloorRaw(mediaani(cleaning+laundry), mediaani(travel),
+ *   minMargin, yön min_stay) — ilman min stay -sääntöä täsmälleen entinen
+ *   kohdekohtainen gapNightFloor
  * - yö ehdolle kun sille on hinta JA hinta < lattia (raakalattia, ei pyöristetty)
- * - peräkkäiset yöt yhdistetään yhdeksi ehdotukseksi per kohde
+ * - peräkkäiset yöt joilla SAMA lattia (floor + min_stay ryhmittelyavaimessa)
+ *   yhdistetään yhdeksi ehdotukseksi per kohde
  * - järjestys: suurin floor_vs_rec_delta ensin (eniten suojattavaa ylimpänä)
  *
  * Yöt joille ei ole hintaa (esim. suositushorisontin ulkopuolella) jätetään
@@ -164,8 +182,8 @@ export function proposeGapFloorDecisions(inputs: ProposeInputs): GapFloorProposa
 
     const turnover = median(rows.map((c) => c.cleaning_cost + c.laundry_cost));
     const travel = median(rows.map((c) => c.travel_cost));
-    const floorRaw = gapNightFloor(turnover, travel, inputs.minMargin);
-    const floorPrice = Math.ceil(floorRaw);
+    const minStayByDate = inputs.minStayByProperty?.get(propertyId);
+    const stayFor = (d: string): number => minStayByDate?.get(d) ?? 1;
 
     const priceByDate = new Map(
       (inputs.priceRecsByProperty.get(propertyId) ?? []).map((p) => [p.stay_date, p.price]),
@@ -174,20 +192,40 @@ export function proposeGapFloorDecisions(inputs: ProposeInputs): GapFloorProposa
     const flagged = gapDates.filter((d) => {
       if (excluded?.has(d)) return false;
       const price = priceByDate.get(d);
-      return price !== undefined && price < floorRaw;
+      return price !== undefined && price < nightFloorRaw(turnover, travel, inputs.minMargin, stayFor(d));
     });
 
-    for (const run of groupConsecutive(flagged)) {
-      const prices = run.map((d) => priceByDate.get(d)!);
+    const pushProposal = (dates: string[]): void => {
+      const stay = stayFor(dates[0]);
+      const floorPrice = nightFloor(turnover, travel, inputs.minMargin, stay);
+      const prices = dates.map((d) => priceByDate.get(d)!);
       proposals.push({
         property_id: propertyId,
-        dates: run,
+        dates,
         floor_price: floorPrice,
+        min_stay: stay,
         rec_min: Math.min(...prices),
         rec_max: Math.max(...prices),
-        protected_nights: run.length,
-        floor_vs_rec_delta: run.reduce((acc, d) => acc + (floorPrice - priceByDate.get(d)!), 0),
+        protected_nights: dates.length,
+        floor_vs_rec_delta: dates.reduce((acc, d) => acc + (floorPrice - priceByDate.get(d)!), 0),
       });
+    };
+
+    for (const run of groupConsecutive(flagged)) {
+      // Lattia (= min_stay, josta lattia kohteen sisällä määräytyy) on osa
+      // ryhmittelyavainta: jono katkaistaan kun yön min_stay vaihtuu, jotta
+      // ehdotuksen floor_price ja amortisointiselite pätevät sen joka yölle.
+      // Ilman min stay -dataa stayFor on vakio 1 → yksi ehdotus per jono,
+      // täsmälleen entinen käytös.
+      let segment: string[] = [];
+      for (const d of run) {
+        if (segment.length > 0 && stayFor(d) !== stayFor(segment[0])) {
+          pushProposal(segment);
+          segment = [];
+        }
+        segment.push(d);
+      }
+      if (segment.length > 0) pushProposal(segment);
     }
   }
 

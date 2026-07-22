@@ -51,6 +51,38 @@ export function gapNightFloor(turnoverCost: number, travelCost: number, minMargi
 }
 
 /**
+ * Min-stay-tietoinen lattia RAAKANA (pyöristämättä): n yön oleskelu hintaan
+ * p/yö nettoaa n×p − (vaihto + matka); vaatimus netto ≥ kate antaa
+ * p ≥ (vaihto + matka + kate) / n, ja pahin sallittu tapaus on n = min_stay.
+ * minStay ≤ 1 (ei sääntöä) → täsmälleen gapNightFloor — nykyiset luvut eivät
+ * muutu. Ehdotusten "hinta < lattia" -vertailu tehdään tällä raakalattialla
+ * (sama sääntö kuin ennen: pyöristys ei saa flägätä rajalla olevaa yötä).
+ */
+export function nightFloorRaw(
+  turnoverCost: number,
+  travelCost: number,
+  minMargin: number,
+  minStay: number,
+): number {
+  return gapNightFloor(turnoverCost, travelCost, minMargin) / Math.max(1, minStay);
+}
+
+/**
+ * Min-stay-tietoinen lattia KIRJOITETTAVANA/NÄYTETTÄVÄNÄ hintana: raakalattia
+ * pyöristettynä YLÖS kokonaiseuroon — kirjoitettu hinta ei koskaan alita
+ * lattiaa. minStay = 1 → ceil(gapNightFloor(...)), eli täsmälleen nykyinen
+ * floor_price (kokonaislukusyötteillä sama luku kuin gapNightFloor itse).
+ */
+export function nightFloor(
+  turnoverCost: number,
+  travelCost: number,
+  minMargin: number,
+  minStay: number,
+): number {
+  return Math.ceil(nightFloorRaw(turnoverCost, travelCost, minMargin, minStay));
+}
+
+/**
  * Portfolion analyysi jaksolle [from, to).
  *
  * Kohdistussäännöt (edge-käyttäytyminen yhdessä paikassa):

@@ -30,6 +30,15 @@ export interface WhPriceRec {
   min_stay?: number;
 }
 
+/**
+ * min_stay_calendar-rivi (verifioitu oikealla tilillä 23.7.):
+ * null tai puuttuva min_stay = ei sääntöä = 1 yö. Tulkinta kutsujassa.
+ */
+export interface WhMinStayDay {
+  stay_date: string;
+  min_stay: number | null;
+}
+
 export type FetchLike = (
   url: string,
   init?: { method?: string; headers?: Record<string, string>; body?: string },
@@ -190,6 +199,29 @@ export class WheelhouseClient {
       throw new Error("Wheelhouse price_recommendations response is missing the data array");
     }
     return data as WhPriceRec[];
+  }
+
+  /**
+   * Listingin min stay -kalenteri välille [start_date, end_date] (verifioitu
+   * oikealla tilillä 23.7.: vastaus on paljas array rivejä {stay_date,
+   * min_stay|null}). Heittää normaalisti virheissä — virhesietoisuus (fallback
+   * min_stay=1) kuuluu kutsujalle, ei tänne. GET → perii cachen, throttlen ja
+   * 429-backoffin request()-polusta.
+   */
+  async getMinStayCalendar(
+    listingId: string | number,
+    channel: string,
+    startDate: string,
+    endDate: string,
+  ): Promise<WhMinStayDay[]> {
+    const body = await this.request(
+      `/listings/${listingId}/min_stay_calendar?channel=${encodeURIComponent(channel)}` +
+        `&start_date=${encodeURIComponent(startDate)}&end_date=${encodeURIComponent(endDate)}`,
+    );
+    if (!Array.isArray(body)) {
+      throw new Error("Wheelhouse min_stay_calendar response was not in the expected shape (array)");
+    }
+    return body as WhMinStayDay[];
   }
 
   // -------------------------------------------------------------------------

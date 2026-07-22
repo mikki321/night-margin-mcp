@@ -1,10 +1,16 @@
 import { avgTurnoverCost, minMargin as minMarginFromEnv } from "../config.js";
-import { gapNightFloor, parseISODate } from "../core/calc.js";
+import { gapNightFloor, nightFloor, parseISODate } from "../core/calc.js";
 import { DEFAULT_RISK_PRESET, type RiskPreset, riskAdjustedMargin } from "../core/risk.js";
 import type { Reservation, TurnoverCost } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
-import { reservationSourceFromEnv } from "../sources/reservationSource.js";
+import { mockReservationSource } from "../sources/reservationSource.js";
 import { avgFallbackFromEnv, resolveCosts } from "../sources/resolveCosts.js";
+import {
+  channelForListing,
+  listingFromDocumented,
+  wheelhouseReservations,
+} from "../wheelhouse/adapter.js";
+import { WheelhouseClient } from "../wheelhouse/client.js";
 
 const MS_PER_DAY = 86_400_000;
 const WINDOW_BEFORE_DAYS = 45;
@@ -97,6 +103,16 @@ export interface GapNightData {
   today?: string;
   /** Riskipreseti jolla data.minMargin on jo laskettu — vain tulosterivin merkintää varten (oletus "recommended"). */
   risk?: RiskPreset;
+  /**
+   * Yön voimassa oleva minimioleskelu (oletus 1 = ei sääntöä). Arvolla ≥ 2
+   * lattia amortisoidaan minimioleskelun yli: nightFloor = ceil((vaihto +
+   * matka + kate) / minStay) ja netto lasketaan amortisoiduilla vaihtokuluilla.
+   * Arvolla 1 lattia on täsmälleen entinen pyöristämätön gapNightFloor —
+   * mock-tila ja min_stay=null-portfoliot eivät muutu.
+   */
+  minStay?: number;
+  /** Huomautus kun min stay -haku epäonnistui (fallback 1) — näytetään lähderivillä. */
+  minStayNote?: string;
 }
 
 /** Puhdas raportti: ei I/O:ta — kaikki data injektoituna. */
@@ -127,7 +143,15 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
   }
 
   const est = estimateTurnover(data.costRows, data.manualAvg);
-  const floor = gapNightFloor(est.turnover, est.travel, data.minMargin);
+  // Min stay ≥ 2 → lattia amortisoidaan minimioleskelun yli (ceil'attu
+  // nightFloor: kirjoitettava hinta ei alita lattiaa). Ilman sääntöä (1)
+  // pidetään TÄSMÄLLEEN entinen pyöristämätön gapNightFloor — mock-tila ja
+  // min_stay=null-portfoliot pysyvät byte-identtisinä.
+  const minStay = data.minStay !== undefined && data.minStay > 1 ? Math.floor(data.minStay) : 1;
+  const floor =
+    minStay > 1
+      ? nightFloor(est.turnover, est.travel, data.minMargin, minStay)
+      : gapNightFloor(est.turnover, est.travel, data.minMargin);
 
   const estimateNote = est.fromRows
     ? `turnover estimate: median of ${est.rowCount} cost rows`
@@ -136,9 +160,14 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
     `Cost source: ${data.costLabel ?? "unknown"}`,
     estimateNote,
     ...(data.costNote ? [data.costNote] : []),
+    ...(data.minStayNote ? [data.minStayNote] : []),
   ].join(" · ");
 
-  const floorPart = `Floor ${eur(floor)} (turnover ${Math.round(est.turnover)} + travel ${Math.round(est.travel)} + margin ${Math.round(data.minMargin)})`;
+  const floorBreakdown = `turnover ${Math.round(est.turnover)} + travel ${Math.round(est.travel)} + margin ${Math.round(data.minMargin)}`;
+  const floorPart =
+    minStay > 1
+      ? `Floor ${eur(floor)} (${floorBreakdown}, amortized over the ${minStay}-night minimum stay)`
+      : `Floor ${eur(floor)} (${floorBreakdown})`;
 
   const price =
     data.candidatePrice !== undefined
@@ -151,18 +180,21 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
   if (price) {
     // Kaksi eri lukua (tuomarisimulaation löydös 2): floor-ylitys sisältää
     // MIN_MARGINin, todellinen netto = hinta − (vaihto + matka) ILMAN sitä.
+    // Min stay ≥ 2: yö voi myydä vain osana ≥ minStay yön oleskelua, joten
+    // vaihtokulu jakautuu sen öille — netto per yö = hinta − (vaihto+matka)/n.
     const diff = price.value - floor;
-    const net = price.value - (est.turnover + est.travel);
+    const net = price.value - (est.turnover + est.travel) / minStay;
     const netTxt = net >= 0 ? `+${eur(net)}` : eur(net);
+    const costsWord = minStay > 1 ? "amortized turnover costs" : "turnover costs";
     if (diff >= 0) {
       const barely = diff < 5 ? " (barely — consider your risk appetite)" : "";
       verdictLine =
         `${floorPart} · ${price.label} ${eur(price.value)} → FILL — clears the floor by ${eur(diff)}${barely}; ` +
-        `net after turnover costs ${netTxt}.`;
+        `net after ${costsWord} ${netTxt}.`;
     } else {
       verdictLine =
         `${floorPart} · ${price.label} ${eur(price.value)} → SKIP — ${eur(-diff)} below floor; ` +
-        `filling would net ${netTxt} after costs.`;
+        `filling would net ${netTxt} after ${minStay > 1 ? "amortized costs" : "costs"}.`;
     }
   } else if (data.whKeyPresent) {
     verdictLine = `${floorPart}. The WH price recommendation will be wired in once the WH reservation adapter is ready — provide candidate_price to get a FILL/SKIP verdict.`;
@@ -191,6 +223,11 @@ export interface GapNightArgs {
   risk?: RiskPreset;
 }
 
+/** Injektoitavat riippuvuudet testejä varten — tuotannossa rakennetaan env:stä. */
+export interface GapNightDeps {
+  client?: WheelhouseClient;
+}
+
 /**
  * Aukkoyön fill/skip-tarkistus.
  *
@@ -202,9 +239,18 @@ export async function runGapNightCheck(
   args: GapNightArgs,
   env: NodeJS.ProcessEnv = process.env,
   now: Date = new Date(),
+  deps: GapNightDeps = {},
 ): Promise<string> {
   const { from, to } = checkWindow(args.date);
-  const reservationSource = reservationSourceFromEnv(env);
+  // Sama client varauksille JA min stay -kalenterille: listListings on
+  // clientissä cachetettu, joten min stay -haku maksaa vain yhden lisäkutsun.
+  // Ilman avainta (mock-tila) käytös on täsmälleen entinen.
+  const key = env.WHEELHOUSE_API_KEY?.trim();
+  const client =
+    deps.client ?? (key ? new WheelhouseClient({ apiKey: key, baseUrl: env.WHEELHOUSE_API_URL }) : undefined);
+  const reservationSource = client
+    ? wheelhouseReservations(client, { channel: env.WHEELHOUSE_CHANNEL })
+    : mockReservationSource();
   const reservations = await reservationSource.getReservations(from, to);
 
   const propertyReservations = reservations.filter((r) => r.property_id === args.property_id);
@@ -236,6 +282,36 @@ export async function runGapNightCheck(
     }
   }
 
+  // Live-tila: yön min stay samasta min_stay_calendarista kuin proposessa
+  // (1 kutsu; listListings tulee clientin cachesta). Range [date, date+1)
+  // kattaa yön riippumatta siitä onko end_date inklusiivinen. Haun
+  // epäonnistuminen EI kaada tarkistusta: fallback = ei sääntöä = 1 + note.
+  let minStay: number | undefined;
+  let minStayNote: string | undefined;
+  if (client && needCosts) {
+    try {
+      const listing = (await client.listListings())
+        .filter((l) => l.is_active !== false)
+        .find((l) => listingFromDocumented(l) === args.property_id);
+      if (listing) {
+        const nextDay = isoDay(parseISODate(args.date) + MS_PER_DAY);
+        const days = await client.getMinStayCalendar(
+          listing.id,
+          channelForListing(listing, env.WHEELHOUSE_CHANNEL),
+          args.date,
+          nextDay,
+        );
+        const hit = days.find((d) => d.stay_date === args.date);
+        const n = hit?.min_stay;
+        if (typeof n === "number" && Number.isFinite(n) && Math.floor(n) >= 2) {
+          minStay = Math.floor(n);
+        }
+      }
+    } catch (e) {
+      minStayNote = `min-stay lookup failed (${(e as Error).message}) — the floor assumes a 1-night minimum stay`;
+    }
+  }
+
   const risk = args.risk ?? DEFAULT_RISK_PRESET;
   return gapNightReport(args.property_id, args.date, {
     reservations,
@@ -245,10 +321,12 @@ export async function runGapNightCheck(
     minMargin: riskAdjustedMargin(minMarginFromEnv(env), risk),
     manualAvg: avgTurnoverCost(env),
     candidatePrice: args.candidate_price,
-    whKeyPresent: Boolean(env.WHEELHOUSE_API_KEY?.trim()),
+    whKeyPresent: Boolean(client),
     costLabel,
     costNote,
     risk,
+    minStay,
+    minStayNote,
     today: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
       .toISOString()
       .slice(0, 10),

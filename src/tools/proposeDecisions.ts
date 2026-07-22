@@ -270,6 +270,10 @@ export async function gatherGapFloorProposals(
 
   // Hinnat per kohde: WH-suositukset avaimella; mock-tilassa kohteen ADR-estimaatti.
   const priceRecsByProperty = new Map<string, NightPrice[]>();
+  // Min stay per yö per kohde (vain kokonaisluvut ≥ 2; null/puuttuva = ei
+  // sääntöä = 1) — täytetään vain live-tilassa. Mock-tilassa jää tyhjäksi →
+  // lattiat täsmälleen ennallaan.
+  const minStayByProperty = new Map<string, ReadonlyMap<string, number>>();
   const listingByProperty = new Map<string, WhListing>();
   const priceNotes: string[] = [];
   let priceLabel: string;
@@ -293,6 +297,25 @@ export async function gatherGapFloorProposals(
         );
       } catch (e) {
         priceNotes.push(`price recommendations failed for "${propertyId}" (${(e as Error).message}) — skipped`);
+        continue; // ilman hintadataa öitä ei voi flägätä → min stay -haku olisi turha kutsu
+      }
+      // Suositusten RINNALLA yön min stay samalle ikkunalle (1 lisäkutsu per
+      // gap-kohde, sarjassa — clientin throttle tahdistaa). Haun epäonnistuminen
+      // EI kaada proposea: fallback = ei sääntöä = 1 (lattiat ennallaan) + note.
+      try {
+        const days = await client.getMinStayCalendar(listing.id, channel, from, to);
+        const byDate = new Map<string, number>();
+        for (const day of days) {
+          const n = day.min_stay;
+          if (typeof day.stay_date === "string" && typeof n === "number" && Number.isFinite(n) && Math.floor(n) >= 2) {
+            byDate.set(day.stay_date, Math.floor(n));
+          }
+        }
+        if (byDate.size > 0) minStayByProperty.set(propertyId, byDate);
+      } catch (e) {
+        priceNotes.push(
+          `min-stay lookup failed for "${propertyId}" (${(e as Error).message}) — floors assume a 1-night minimum stay`,
+        );
       }
     }
   } else {
@@ -335,6 +358,7 @@ export async function gatherGapFloorProposals(
     to,
     minMargin,
     excludeNights: appliedNights,
+    minStayByProperty,
   });
 
   return {
@@ -496,9 +520,14 @@ export async function runProposeDecisions(
   const lines: string[] = [];
   newDecisions.forEach((d, i) => {
     const p = proposals[i];
+    // Min stay ≥ 2 → lattia on amortisoitu minimioleskelun yli; sanotaan se
+    // ääneen, ettei matala lattia näytä virheeltä. min_stay = 1 → rivi
+    // täsmälleen ennallaan (mock-demo ja min_stay=null-portfoliot eivät muutu).
+    const amortNote =
+      p.min_stay >= 2 ? ` (turnover amortized over the ${p.min_stay}-night minimum stay)` : "";
     lines.push(
       `${i + 1}. **${d.id} · ${d.property_id}** · ${formatDates(d.dates)} (${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"})\n` +
-        `   Raise to floor ${eur(d.floor_price)}/night — protects ${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"} from selling below cost (floor ${eur(d.floor_price)} vs current recommendation ${formatRecRange(p)}).`,
+        `   Raise to floor ${eur(d.floor_price)}/night${amortNote} — protects ${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"} from selling below cost (floor ${eur(d.floor_price)} vs current recommendation ${formatRecRange(p)}).`,
     );
   });
   parts.push(
