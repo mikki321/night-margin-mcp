@@ -62,4 +62,9 @@ export interface PortfolioAnalysis {
   /** leak_nights / booked_nights, prosentteina */
   leak_pct: number;
   negative_reservations: NegativeReservation[];
+  /**
+   * Kohteet ilman yhtään varausta jaksolla — asetetaan VAIN kun analyysille
+   * annettiin täysi kohdelista (allPropertyIds); muuten ei tiedetä.
+   */
+  no_booking_properties?: number;
 }

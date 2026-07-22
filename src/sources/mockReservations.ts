@@ -95,3 +95,8 @@ export function generateMockReservations(from: string, to: string): Reservation[
   calendarCache ??= generateCalendar();
   return calendarCache.filter((r) => r.checkin < to && r.checkout >= from);
 }
+
+/** Demo-portfolion kaikki kohteet — käyttöasteen nimittäjä (listPropertyIds). */
+export function mockPropertyIds(): string[] {
+  return PROPERTIES.map((p) => p.id);
+}

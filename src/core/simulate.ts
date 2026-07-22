@@ -36,6 +36,9 @@ function medianTotalCost(rows: TurnoverCost[]): number {
 /**
  * Strategia A — täytä aukkoyöt alennuksella.
  *
+ * OLETUS (näytetään käyttäjälle compare_strategies-tulosteessa): JOKAINEN
+ * aukkoyö myydään alennushintaan — 100 % täyttö on yläraja, ei ennuste.
+ *
  * Per kohde:
  * - ADR = jaksolle [from, to) osuvien varausten Σ gross_revenue / Σ nights
  *   (koko varauksen luvuilla, ei jaksolle leikattuna).

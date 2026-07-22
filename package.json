@@ -1,7 +1,7 @@
 {
   "name": "night-margin-mcp",
-  "version": "0.2.0",
-  "description": "Margin engine for short-term rentals — net per available night, after turnover costs. MCP server for Claude, powered by the Wheelhouse RM API.",
+  "version": "0.3.0",
+  "description": "The margin guard for Wheelhouse pricing \u2014 net per available night, after turnover costs. MCP server for Claude, powered by the Wheelhouse RM API.",
   "license": "MIT",
   "keywords": [
     "mcp",

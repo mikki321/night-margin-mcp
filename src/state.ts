@@ -1,0 +1,225 @@
+/**
+ * Paikallinen tila: päätösloki (decisions.json) ja kuukausitavoitteet
+ * (targets.json). Hakemisto = env NM_STATE_DIR tai ~/.night-margin —
+ * npx-asennus on efemeraalinen, joten stateä EI säilötä pakettihakemistoon
+ * (turvasääntö 4). Kirjoitukset ovat atomisia (tmp + rename samassa
+ * hakemistossa), jotta keskeytynyt kirjoitus ei koskaan korruptoi lokia.
+ */
+
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmdirSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+export type DecisionStatus = "proposed" | "applied" | "reverted";
+
+/** Rehellinen vaikutusarvio — EI kuvitteellista tuottolupausta. */
+export interface DecisionExpected {
+  /** Montako yötä ehdotus suojaa alle omakustannehinnan myynniltä. */
+  protected_nights: number;
+  /** Σ(floor_price − suositus) ehdotuksen öiltä, € — kuinka paljon lattian alla suositukset ovat. */
+  floor_vs_rec_delta: number;
+}
+
+export interface Decision {
+  /** Lyhyt juokseva id: d1, d2, … — ei koskaan uudelleenkäytetä. */
+  id: string;
+  /** ISO-aikaleima. */
+  created_at: string;
+  type: "gap_floor";
+  property_id: string;
+  listing_id: string | number;
+  /** Listingin OMA channel-kenttä (EI env-yliajoa) — kirjoitukset VAIN tälle (turvasääntö 5). */
+  channel: string;
+  /** Kirjoitettavien ratejen valuutta listingistä; puuttuessa "EUR". */
+  currency?: string;
+  /** Ehdotuksen yöt, YYYY-MM-DD (peräkkäisiä). */
+  dates: string[];
+  /** Lattiahinta €/yö johon yöt nostetaan (pyöristetty ylös kokonaiseuroon). */
+  floor_price: number;
+  /** Matalin WH-suositus (tai demo-estimaatti) ehdotuksen öiltä, €. */
+  wh_recommended_price: number;
+  expected: DecisionExpected;
+  status: DecisionStatus;
+  applied_at?: string;
+  reverted_at?: string;
+  /** Wheelhouseen oikeasti kirjoitetut rangeat (apply täyttää; revert käyttää). */
+  applied_ranges?: { start_date: string; end_date: string }[];
+  /** Aiempi tila ENNEN kirjoitusta (turvasääntö 3) — revert palauttaa tästä. */
+  snapshot?: { prior_custom_rates: Record<string, unknown>[] };
+}
+
+export interface Target {
+  property_id: string;
+  /** YYYY-MM */
+  month: string;
+  /** Kuukauden bruttotavoite, €. */
+  gross_target: number;
+  set_at: string;
+}
+
+const DECISIONS_FILE = "decisions.json";
+const TARGETS_FILE = "targets.json";
+const SEEN_BOOKINGS_FILE = "seen_bookings.json";
+
+/** reservation_id → ISO-aikaleima jolloin varaus nähtiin ensi kertaa. Käyttää check_alerts uusien varausten tunnistukseen. */
+export type SeenBookings = Record<string, string>;
+
+/** State-hakemisto: env NM_STATE_DIR tai ~/.night-margin. Luodaan tarvittaessa (700). */
+export function stateDir(env: NodeJS.ProcessEnv = process.env): string {
+  const dir = env.NM_STATE_DIR?.trim() || join(homedir(), ".night-margin");
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  return dir;
+}
+
+function readJsonArray<T>(file: string, what: string): T[] {
+  if (!existsSync(file)) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new Error(
+      `Failed to read the ${what} (${file}): ${(e as Error).message} — fix or delete the file`,
+    );
+  }
+  if (!Array.isArray(parsed)) {
+    throw new Error(`The ${what} (${file}) must contain a JSON array — fix or delete the file`);
+  }
+  return parsed as T[];
+}
+
+/** Atominen kirjoitus: tmp-tiedosto samaan hakemistoon + rename (POSIX-atominen). */
+function writeJsonAtomic(file: string, data: unknown): void {
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  writeFileSync(tmp, `${JSON.stringify(data, null, 2)}\n`, { mode: 0o600 });
+  renameSync(tmp, file);
+}
+
+export function readDecisions(env: NodeJS.ProcessEnv = process.env): Decision[] {
+  return readJsonArray<Decision>(join(stateDir(env), DECISIONS_FILE), "decision log");
+}
+
+export function writeDecisions(decisions: Decision[], env: NodeJS.ProcessEnv = process.env): void {
+  writeJsonAtomic(join(stateDir(env), DECISIONS_FILE), decisions);
+}
+
+export function readTargets(env: NodeJS.ProcessEnv = process.env): Target[] {
+  return readJsonArray<Target>(join(stateDir(env), TARGETS_FILE), "targets file");
+}
+
+export function writeTargets(targets: Target[], env: NodeJS.ProcessEnv = process.env): void {
+  writeJsonAtomic(join(stateDir(env), TARGETS_FILE), targets);
+}
+
+function readJsonObject<T extends object>(file: string, what: string): T {
+  if (!existsSync(file)) return {} as T;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(file, "utf8"));
+  } catch (e) {
+    throw new Error(
+      `Failed to read the ${what} (${file}): ${(e as Error).message} — fix or delete the file`,
+    );
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error(`The ${what} (${file}) must contain a JSON object — fix or delete the file`);
+  }
+  return parsed as T;
+}
+
+/** Puuttuva tiedosto → tyhjä objekti (ei vielä nähtyjä varauksia — ensimmäinen ajo on baseline). */
+export function readSeenBookings(env: NodeJS.ProcessEnv = process.env): SeenBookings {
+  return readJsonObject<SeenBookings>(join(stateDir(env), SEEN_BOOKINGS_FILE), "seen bookings file");
+}
+
+export function writeSeenBookings(seen: SeenBookings, env: NodeJS.ProcessEnv = process.env): void {
+  writeJsonAtomic(join(stateDir(env), SEEN_BOOKINGS_FILE), seen);
+}
+
+/**
+ * Onko seen_bookings.json koskaan kirjoitettu tälle state-hakemistolle —
+ * TIEDOSTON OLEMASSAOLO, ei sisällön tyhjyys. check_alerts käyttää tätä
+ * baseline-tunnistukseen: jos ensimmäinen ajo löytää nolla varausta,
+ * tyhjä-sisältöinen tiedosto silti kirjoitetaan, joten "onko seen tyhjä"
+ * tunnistaisi JOKAISEN myöhemmän ajon baselineksi kunnes ensimmäinen varaus
+ * ilmestyy — se varaus jäisi hiljaa hälyttämättä. Tiedoston olemassaolo ei
+ * kärsi tästä ongelmasta.
+ */
+export function hasSeenBookings(env: NodeJS.ProcessEnv = process.env): boolean {
+  return existsSync(join(stateDir(env), SEEN_BOOKINGS_FILE));
+}
+
+const LOCK_TIMEOUT_MS = 5_000;
+const LOCK_STALE_MS = 120_000;
+const LOCK_RETRY_MS = 100;
+
+const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+
+/** Sisäinen: lukon aikarajat env-yliajettavia (testit) — ei dokumentoitu käyttäjille. */
+function lockMs(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const v = Number(env[name]);
+  return Number.isFinite(v) && v > 0 ? v : fallback;
+}
+
+/**
+ * Advisory-lukko rinnakkaisia sessioita vastaan (mkdir on atominen). Suojaa
+ * apply/revertin read-modify-write-syklit: ilman lukkoa kaksi sessiota voisi
+ * hävittää toistensa kirjoitukset tai pahimmillaan ottaa snapshotin toisen
+ * session jo kirjoittamista lattiahinnoista. Kaatuneen prosessin lukko
+ * siivotaan iän perusteella (stale > 2 min).
+ */
+export async function acquireStateLock(env: NodeJS.ProcessEnv = process.env): Promise<() => void> {
+  const lock = join(stateDir(env), ".lock");
+  const timeoutMs = lockMs(env, "NM_LOCK_TIMEOUT_MS", LOCK_TIMEOUT_MS);
+  const staleMs = lockMs(env, "NM_LOCK_STALE_MS", LOCK_STALE_MS);
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    try {
+      mkdirSync(lock);
+      return () => {
+        try {
+          rmdirSync(lock);
+        } catch {
+          /* jo vapautettu */
+        }
+      };
+    } catch {
+      try {
+        if (Date.now() - statSync(lock).mtimeMs > staleMs) {
+          try {
+            rmdirSync(lock);
+          } catch {
+            /* toinen sessio ehti siivota */
+          }
+          continue;
+        }
+      } catch {
+        continue; // lukko ehti kadota — yritä heti uudelleen
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `The decision log is locked by another night-margin session (${lock}). ` +
+            "Wait for it to finish, or delete the .lock directory if no other session is running.",
+        );
+      }
+      await sleep(LOCK_RETRY_MS);
+    }
+  }
+}
+
+/** Seuraava juokseva päätös-id koko lokin yli (myös applied/reverted) — id:tä ei uudelleenkäytetä. */
+export function nextDecisionIdNumber(decisions: Decision[]): number {
+  let max = 0;
+  for (const d of decisions) {
+    const m = /^d(\d+)$/.exec(d.id);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}

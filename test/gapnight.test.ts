@@ -119,22 +119,32 @@ describe("findBooking", () => {
 });
 
 describe("gapNightReport", () => {
-  it("SKIP kun ehdokashinta alle lattian (planin esimerkki)", () => {
+  it("SKIP kun ehdokashinta alle lattian (planin esimerkki): floor-vaje JA netto erikseen", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 96 }));
     expect(out).toContain("Floor €118 (turnover 70 + travel 23 + margin 25)");
     expect(out).toContain("candidate price €96");
-    expect(out).toContain("→ SKIP — filling yields");
-    expect(out).toContain("-€22"); // 96 − 118 = −22
+    // 96 − 118 = −22 lattiasta; netto = 96 − (70 + 23) = +3 ilman MIN_MARGINia
+    expect(out).toContain("→ SKIP — €22 below floor; filling would net +€3 after costs.");
   });
 
-  it("FILL kun ehdokashinta yli lattian", () => {
+  it("SKIP nettonegatiivisella hinnalla näyttää negatiivisen netton", () => {
+    const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 85 }));
+    // 85 − 118 = −33 lattiasta; netto = 85 − 93 = −8
+    expect(out).toContain("→ SKIP — €33 below floor; filling would net -€8 after costs.");
+  });
+
+  it("FILL kun ehdokashinta yli lattian: ylitys JA netto erikseen", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 150 }));
-    expect(out).toContain("→ FILL — filling yields +€32");
+    // 150 − 118 = +32; netto = 150 − 93 = +57
+    expect(out).toContain("→ FILL — clears the floor by €32; net after turnover costs +€57.");
+    expect(out).not.toContain("barely");
   });
 
-  it("FILL kun ehdokashinta täsmälleen lattialla", () => {
+  it("FILL täsmälleen lattialla → rajatapauslipuke (ylitys < €5)", () => {
     const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 118 }));
-    expect(out).toContain("→ FILL — filling yields +€0");
+    expect(out).toContain(
+      "→ FILL — clears the floor by €0 (barely — consider your risk appetite); net after turnover costs +€25.",
+    );
   });
 
   it("recommendedPrice toimii WH-suosituksena kun candidatea ei ole (askel 3 -kytkentä)", () => {
@@ -144,7 +154,7 @@ describe("gapNightReport", () => {
       baseData({ recommendedPrice: 130, whKeyPresent: true }),
     );
     expect(out).toContain("WH recommendation €130");
-    expect(out).toContain("→ FILL — filling yields +€12");
+    expect(out).toContain("→ FILL — clears the floor by €12; net after turnover costs +€37.");
   });
 
   it("candidate_price voittaa WH-suosituksen", () => {
@@ -208,7 +218,35 @@ describe("gapNightReport", () => {
     const out = gapNightReport("p1", DATE, baseData({ costRows: [], candidatePrice: 100 }));
     expect(out).toContain("no cost rows → manual average €70");
     expect(out).toContain("Floor €95 (turnover 70 + travel 0 + margin 25)"); // 70 + 0 + 25
-    expect(out).toContain("→ FILL — filling yields +€5");
+    // ylitys 5 € = raja: EI barely-lipuketta; netto = 100 − 70 = +30
+    expect(out).toContain("→ FILL — clears the floor by €5; net after turnover costs +€30.");
+  });
+});
+
+describe("gapNightReport — mennyt yö (regressio: FILL-verdikti menneelle yölle ilman huomautusta)", () => {
+  const PAST_NOTE = "this night is in the past — the verdict is retrospective only";
+
+  it("today > date → retrospektiivisyys-huomautus verdiktin perässä", () => {
+    const out = gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: "2026-09-01" }));
+    expect(out).toContain("FILL"); // verdikti annetaan yhä
+    expect(out).toContain(PAST_NOTE);
+    expect(out.indexOf("FILL")).toBeLessThan(out.indexOf(PAST_NOTE)); // huomautus verdiktin jälkeen
+  });
+
+  it("myös lattia-raportti ilman hintaa saa huomautuksen menneelle yölle", () => {
+    const out = gapNightReport("p1", DATE, baseData({ today: "2026-09-01" }));
+    expect(out).toContain(PAST_NOTE);
+  });
+
+  it("tämä päivä tai tuleva yö → ei huomautusta", () => {
+    expect(gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: DATE }))).not.toContain(
+      PAST_NOTE,
+    );
+    expect(
+      gapNightReport("p1", DATE, baseData({ candidatePrice: 150, today: "2026-08-01" })),
+    ).not.toContain(PAST_NOTE);
+    // ilman today-kenttää käytös ennallaan (puhdas funktio, vanhat kutsujat)
+    expect(gapNightReport("p1", DATE, baseData({ candidatePrice: 150 }))).not.toContain(PAST_NOTE);
   });
 });
 
@@ -264,12 +302,14 @@ describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", (
     expect(out).toContain("Provide candidate_price");
   });
 
-  it("aukkoyö + candidate_price → FILL/SKIP lattiaa vasten", async () => {
+  it("aukkoyö + candidate_price → FILL/SKIP lattiaa vasten, molemmat luvut mukana", async () => {
     const { property_id, date } = findMockDate(false);
     const fill = await runGapNightCheck({ property_id, date, candidate_price: 200 }, env);
-    expect(fill).toContain("→ FILL");
+    // lattia 95 (manual 70 + 0 + 25): ylitys 105, netto 200 − 70 = 130
+    expect(fill).toContain("→ FILL — clears the floor by €105; net after turnover costs +€130.");
     const skip = await runGapNightCheck({ property_id, date, candidate_price: 90 }, env);
-    expect(skip).toContain("→ SKIP");
+    // vaje 5, netto 90 − 70 = +20 — alle lattian mutta yhä kulut kattava
+    expect(skip).toContain("→ SKIP — €5 below floor; filling would net +€20 after costs.");
   });
 
   it("README-esimerkki: demo-1br-01 2026-06-23 on aukkoyö myös gap-checkin omassa ikkunassa", async () => {
@@ -278,6 +318,34 @@ describe("runGapNightCheck (env injektoitu, mock-data + manual-kustannukset)", (
     const out = await runGapNightCheck({ property_id: "demo-1br-01", date: "2026-06-23" }, env);
     expect(out).not.toContain("Not a gap night");
     expect(out).toContain("Floor €95"); // manual 70 + matka 0 + kate 25
+  });
+
+  it("mennyt yö (README-esimerkki) → verdikti + retrospektiivisyys-huomautus (regressio)", async () => {
+    const out = await runGapNightCheck(
+      { property_id: "demo-1br-01", date: "2026-06-23", candidate_price: 96 },
+      env,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    expect(out).toContain("FILL"); // sama verdikti kuin ennenkin …
+    expect(out).toContain(
+      "this night is in the past — the verdict is retrospective only; pricing decisions apply to future nights",
+    );
+  });
+
+  it("tuleva yö → ei mennyt-huomautusta", async () => {
+    const { property_id, date } = findMockDate(false); // elokuu 2026
+    const out = await runGapNightCheck(
+      { property_id, date, candidate_price: 200 },
+      env,
+      new Date("2026-07-22T12:00:00Z"),
+    );
+    expect(out).not.toContain("retrospective");
+  });
+
+  it("olematon kalenteripäivä (2026-02-30) → selkeä virhe eikä hiljaista uudelleentulkintaa (regressio)", async () => {
+    await expect(
+      runGapNightCheck({ property_id: "demo-1br-01", date: "2026-02-30" }, env),
+    ).rejects.toThrow(/does not exist in the calendar/);
   });
 
   it("kelvoton MIN_MARGIN kaatuu selkeästi", async () => {

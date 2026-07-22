@@ -11,6 +11,13 @@ const MS_PER_DAY = 86_400_000;
 export function parseISODate(d: string): number {
   const t = Date.parse(`${d}T00:00:00Z`);
   if (Number.isNaN(t)) throw new Error(`Invalid date: "${d}" — use the format YYYY-MM-DD`);
+  // Kalenteritarkistus (round-trip): V8 pyöräyttää esim. 2026-02-30 → 2026-03-02
+  // hiljaa — verdikti laskettaisiin eri yölle kuin käyttäjä kysyi.
+  if (new Date(t).toISOString().slice(0, 10) !== d) {
+    throw new Error(
+      `Invalid date: "${d}" — that day does not exist in the calendar (use the format YYYY-MM-DD)`,
+    );
+  }
   return t;
 }
 
@@ -55,12 +62,18 @@ export function gapNightFloor(turnoverCost: number, travelCost: number, minMargi
  * Oletus: yksi yksikkö per property_id. Päällekkäiset varaukset (moniyksikkö-
  * kohde) SUMMAUTUVAT varattuihin öihin — käyttöaste voi silloin ylittää 100 %
  * ja gap_nights leikkautuu nollaan. Sama oletus on core/simulate.ts:ssä.
+ *
+ * VALINNAINEN allPropertyIds (löydös 7): kun annettu, listan kohteet joilla ei
+ * ole yhtään varausta jaksolla lisätään mukaan (booked=0, gap=jakson yöt,
+ * gross=costs=0) — käyttöasteen nimittäjä kertoo koko portfolion, ei vain
+ * varattuja kohteita. Ilman parametria käytös on täsmälleen entinen.
  */
 export function analyzePortfolio(
   reservations: Reservation[],
   costsById: Map<string, TurnoverCost>,
   from: string,
   to: string,
+  allPropertyIds?: string[],
 ): PortfolioAnalysis {
   const fromT = parseISODate(from);
   const toT = parseISODate(to);
@@ -108,6 +121,17 @@ export function analyzePortfolio(
     byProperty.set(r.property_id, stat);
   }
 
+  // Nollavarauskohteet mukaan nimittäjään vain kun kohdelista on annettu.
+  let noBookingProperties = 0;
+  if (allPropertyIds) {
+    for (const id of allPropertyIds) {
+      if (!byProperty.has(id)) {
+        byProperty.set(id, { booked: 0, gross: 0, costs: 0 });
+        noBookingProperties += 1;
+      }
+    }
+  }
+
   const properties: PropertyStats[] = [...byProperty.entries()].map(([property_id, s]) => {
     const available = periodNights;
     const net = s.gross - s.costs;
@@ -151,5 +175,6 @@ export function analyzePortfolio(
     leak_nights: leakNights,
     leak_pct: bookedNights > 0 ? (leakNights / bookedNights) * 100 : 0,
     negative_reservations: negatives,
+    ...(allPropertyIds !== undefined ? { no_booking_properties: noBookingProperties } : {}),
   };
 }

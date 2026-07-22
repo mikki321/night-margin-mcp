@@ -25,7 +25,7 @@ export function avgFallbackFromEnv(
 export interface ResolvedCosts {
   /** avain = varauksen reservation_id (core/calc.ts:n odottama muoto) */
   costs: Map<string, TurnoverCost>;
-  /** "Cost attribution: 41 id, 6 composite" — tyhjä kun lähde ei tarjoa raakarivejä (manual). */
+  /** "Cost attribution: 41 by reservation_id, 6 by composite key (47 total)" — tyhjä kun lähde ei tarjoa raakarivejä (manual). */
   matchNote: string;
 }
 

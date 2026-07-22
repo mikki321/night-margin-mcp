@@ -1,5 +1,6 @@
 import { avgTurnoverCost, minMargin as minMarginFromEnv } from "../config.js";
 import { gapNightFloor, parseISODate } from "../core/calc.js";
+import { DEFAULT_RISK_PRESET, type RiskPreset, riskAdjustedMargin } from "../core/risk.js";
 import type { Reservation, TurnoverCost } from "../core/types.js";
 import { costSourceFromEnv } from "../sources/index.js";
 import { reservationSourceFromEnv } from "../sources/reservationSource.js";
@@ -88,6 +89,14 @@ export interface GapNightData {
   costLabel?: string;
   /** Lisähuomautus kustannusriveistä (esim. haun epäonnistuminen). */
   costNote?: string;
+  /**
+   * Tämä päivä (YYYY-MM-DD, UTC) — kun annettu ja tarkasteltava yö on mennyt,
+   * verdiktiin lisätään retrospektiivisyys-huomautus (propose_decisions
+   * kieltäytyy menneistä öistä; tämä tool kertoo asian rehellisesti).
+   */
+  today?: string;
+  /** Riskipreseti jolla data.minMargin on jo laskettu — vain tulosterivin merkintää varten (oletus "recommended"). */
+  risk?: RiskPreset;
 }
 
 /** Puhdas raportti: ei I/O:ta — kaikki data injektoituna. */
@@ -140,23 +149,46 @@ export function gapNightReport(propertyId: string, date: string, data: GapNightD
 
   let verdictLine: string;
   if (price) {
+    // Kaksi eri lukua (tuomarisimulaation löydös 2): floor-ylitys sisältää
+    // MIN_MARGINin, todellinen netto = hinta − (vaihto + matka) ILMAN sitä.
     const diff = price.value - floor;
-    const verdict = diff >= 0 ? "FILL" : "SKIP";
-    const diffTxt = diff >= 0 ? `+${eur(diff)}` : eur(diff);
-    verdictLine = `${floorPart} · ${price.label} ${eur(price.value)} → ${verdict} — filling yields ${diffTxt}.`;
+    const net = price.value - (est.turnover + est.travel);
+    const netTxt = net >= 0 ? `+${eur(net)}` : eur(net);
+    if (diff >= 0) {
+      const barely = diff < 5 ? " (barely — consider your risk appetite)" : "";
+      verdictLine =
+        `${floorPart} · ${price.label} ${eur(price.value)} → FILL — clears the floor by ${eur(diff)}${barely}; ` +
+        `net after turnover costs ${netTxt}.`;
+    } else {
+      verdictLine =
+        `${floorPart} · ${price.label} ${eur(price.value)} → SKIP — ${eur(-diff)} below floor; ` +
+        `filling would net ${netTxt} after costs.`;
+    }
   } else if (data.whKeyPresent) {
     verdictLine = `${floorPart}. The WH price recommendation will be wired in once the WH reservation adapter is ready — provide candidate_price to get a FILL/SKIP verdict.`;
   } else {
     verdictLine = `${floorPart}. Provide candidate_price (€/night) to get a FILL/SKIP verdict — FILL when price ≥ floor.`;
   }
 
-  return [header, sourceLine, verdictLine].join("\n");
+  const risk = data.risk ?? DEFAULT_RISK_PRESET;
+  const riskLine = `Floor uses the ${risk} risk preset (margin ${eur(Math.round(data.minMargin))}).`;
+
+  // Mennyt yö: verdikti ei ole toimintakelpoinen — sama tulevaisuussääntö
+  // kuin propose_decisionsissa, mutta raportti annetaan retrospektiivisenä.
+  const lines = [header, sourceLine, verdictLine, riskLine];
+  if (data.today !== undefined && date < data.today) {
+    lines.push(
+      `Note: this night is in the past — the verdict is retrospective only; pricing decisions apply to future nights.`,
+    );
+  }
+  return lines.join("\n");
 }
 
 export interface GapNightArgs {
   property_id: string;
   date: string;
   candidate_price?: number;
+  risk?: RiskPreset;
 }
 
 /**
@@ -169,6 +201,7 @@ export interface GapNightArgs {
 export async function runGapNightCheck(
   args: GapNightArgs,
   env: NodeJS.ProcessEnv = process.env,
+  now: Date = new Date(),
 ): Promise<string> {
   const { from, to } = checkWindow(args.date);
   const reservationSource = reservationSourceFromEnv(env);
@@ -203,16 +236,21 @@ export async function runGapNightCheck(
     }
   }
 
+  const risk = args.risk ?? DEFAULT_RISK_PRESET;
   return gapNightReport(args.property_id, args.date, {
     reservations,
     costRows,
     from,
     to,
-    minMargin: minMarginFromEnv(env),
+    minMargin: riskAdjustedMargin(minMarginFromEnv(env), risk),
     manualAvg: avgTurnoverCost(env),
     candidatePrice: args.candidate_price,
     whKeyPresent: Boolean(env.WHEELHOUSE_API_KEY?.trim()),
     costLabel,
     costNote,
+    risk,
+    today: new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()))
+      .toISOString()
+      .slice(0, 10),
   });
 }

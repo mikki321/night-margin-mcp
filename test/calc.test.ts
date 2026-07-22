@@ -4,6 +4,7 @@ import {
   gapNightFloor,
   nightsInPeriod,
   overlapNights,
+  parseISODate,
   reservationNet,
 } from "../src/core/calc.js";
 import type { Reservation, TurnoverCost } from "../src/core/types.js";
@@ -34,6 +35,26 @@ const cost = (id: string, cleaning: number, travel = 0, laundry = 0): TurnoverCo
 });
 
 const costMap = (...costs: TurnoverCost[]) => new Map(costs.map((c) => [c.reservation_id, c]));
+
+describe("parseISODate — kalenteritarkistus (regressio: 2026-02-30 hyväksyttiin ja tulkittiin hiljaa 2026-03-02:ksi)", () => {
+  it("hyväksyy oikeat kalenteripäivät, myös karkauspäivän", () => {
+    expect(parseISODate("2026-06-15")).toBe(Date.parse("2026-06-15T00:00:00Z"));
+    expect(parseISODate("2024-02-29")).toBe(Date.parse("2024-02-29T00:00:00Z")); // 2024 on karkausvuosi
+    expect(parseISODate("2026-12-31")).toBe(Date.parse("2026-12-31T00:00:00Z"));
+  });
+
+  it("hylkää olemattomat kalenteripäivät joita V8 pyöräyttäisi eteenpäin", () => {
+    expect(() => parseISODate("2026-02-30")).toThrow(/does not exist in the calendar/);
+    expect(() => parseISODate("2026-04-31")).toThrow(/does not exist in the calendar/);
+    expect(() => parseISODate("2026-02-29")).toThrow(/does not exist in the calendar/); // 2026 EI ole karkausvuosi
+  });
+
+  it("hylkää yhä väärän muodon selkeällä virheellä", () => {
+    expect(() => parseISODate("2026-13-01")).toThrow(/Invalid date/);
+    expect(() => parseISODate("kesäkuu")).toThrow(/Invalid date/);
+    expect(() => parseISODate("2026-6-15")).toThrow(/Invalid date/); // ei-nollattu kuukausi ei läpäise round-trippiä
+  });
+});
 
 describe("nightsInPeriod", () => {
   it("laskee yöt [from, to) -välillä", () => {
@@ -132,6 +153,40 @@ describe("analyzePortfolio", () => {
     expect(() => analyzePortfolio(reservations, costMap(cost("r1", 70)), from, to)).toThrow(
       /has no cost row/,
     );
+  });
+
+  it("ilman allPropertyIds-parametria käytös ja tuloskentät ovat ennallaan", () => {
+    expect(a.no_booking_properties).toBeUndefined();
+    expect("no_booking_properties" in a).toBe(false);
+  });
+
+  it("allPropertyIds: nollavarauskohde mukaan nimittäjään (booked 0, gap = jakson yöt, net 0)", () => {
+    const b = analyzePortfolio(reservations, costs, from, to, ["p1", "p2", "p3-empty"]);
+    const empty = b.properties.find((p) => p.property_id === "p3-empty")!;
+    expect(empty).toEqual({
+      property_id: "p3-empty",
+      booked_nights: 0,
+      gap_nights: 10,
+      available_nights: 10,
+      gross: 0,
+      costs: 0,
+      net: 0,
+      net_per_available_night: 0,
+    });
+    // nimittäjä kasvaa 20 → 30, varatut yöt eivät → käyttöaste laskee rehellisesti
+    expect(b.totals.available_nights).toBe(30);
+    expect(b.totals.booked_nights).toBe(11);
+    expect(b.totals.occupancy_pct).toBeCloseTo((11 / 30) * 100);
+    expect(b.totals.net).toBe(a.totals.net); // netto ei muutu, vain jakauma
+    expect(b.totals.net_per_available_night).toBeCloseTo(1050 / 30);
+    expect(b.no_booking_properties).toBe(1);
+  });
+
+  it("allPropertyIds: listan varaukselliset kohteet eivät duplikoidu eikä luku kasva", () => {
+    const b = analyzePortfolio(reservations, costs, from, to, ["p1", "p2"]);
+    expect(b.properties).toHaveLength(2);
+    expect(b.totals.available_nights).toBe(20);
+    expect(b.no_booking_properties).toBe(0);
   });
 });
 

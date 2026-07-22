@@ -256,6 +256,10 @@ describe("formatComparison", () => {
 
     expect(text).toContain("## Strategy comparison 2026-07-01 → 2026-07-11");
     expect(text).toContain("| Scenario | Gross | Net | Net/night | Occupancy | Turnovers | Leak |");
+    // A:n 100 % -täyttöoletus näkyy tulosteessa (tuomarisimulaation löydös 1)
+    expect(text).toContain(
+      "_Strategy A assumes every gap night sells at the discounted price — an upper bound._",
+    );
     expect(text).toContain("**A** raises occupancy by +10.0 pp but net/night changes by -€2");
     expect(text).toContain("**B** lowers occupancy");
     // fixtuurissa A: brutto +120 €, netto −40 € → ydinviesti mukana
@@ -280,6 +284,24 @@ describe("formatComparison", () => {
     expect(text).toContain(
       `## Strategy comparison ${FROM} → ${TO} (default window: last 30 + next 90 days — pass from/to to change)`,
     );
+  });
+
+  it("KUUNLOPPU-ANSA: monthEndNote näkyy ikkunarivin yhteydessä kun annettu", () => {
+    const { reservations, costs } = fixture();
+    const base = analyzePortfolio(reservations, costs, FROM, TO);
+    const scenario = { label: "Baseline", analysis: base, turnovers: countTurnovers(reservations, FROM, TO) };
+    const note =
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.";
+    const text = formatComparison(
+      [scenario, scenario, scenario],
+      "2026-08-01",
+      "2026-08-31",
+      "manual (test)",
+      "",
+      false,
+      note,
+    );
+    expect(text).toContain(`## Strategy comparison 2026-08-01 → 2026-08-31\n${note}`);
   });
 });
 
