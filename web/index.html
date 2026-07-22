@@ -280,6 +280,44 @@
   .progress i { display: block; height: 100%; background: #256abf; } /* BLUES[4] — existing ramp */
   .pnote { font-size: 12px; color: var(--muted); margin-top: 5px; font-variant-numeric: tabular-nums; }
   .snote { font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+
+  /* ---- Month plan panel (Targets tab) ----
+     Same tokens as the rest of the page. Chart strokes are steps of the
+     existing BLUES ramp, theme-adjusted the same way the heatmap ink is:
+     light theme uses the dark end, dark theme the light end. Identity is
+     never color-alone — every series is also dashed differently, legended
+     and direct-labeled. */
+  #planPanel { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .plan-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 2px 0 10px; }
+  .plan-stat { font-size: 12.5px; color: var(--ink-2); margin: 4px 0 10px; }
+  .plan-stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .plan-stat .sep { margin: 0 6px; }
+  .plan-chartwrap { position: relative; }
+  .plan-chartwrap svg { display: block; width: 100%; height: auto; }
+  .pl-axis { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .pl-grid { stroke: var(--grid); stroke-width: 1; }
+  .pl-lab { font-size: 11.5px; fill: var(--ink-2); }
+  .pl-lab tspan { font-weight: 650; fill: var(--ink); }
+  .pl-a { stroke: #184f95; } /* BLUES[5] */
+  .pl-p { stroke: #3987e5; } /* BLUES[3] */
+  .pl-afill { fill: #184f95; }
+  .pl-pfill { fill: #3987e5; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .pl-a { stroke: #9ec5f4; } /* BLUES[1] */
+    :root:where(:not([data-theme="light"])) .pl-afill { fill: #9ec5f4; }
+  }
+  :root[data-theme="dark"] .pl-a { stroke: #9ec5f4; }
+  :root[data-theme="dark"] .pl-afill { fill: #9ec5f4; }
+  .plan-strats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 10px 0 2px; font-size: 12.5px; color: var(--ink-2); }
+  .plan-strats label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; min-height: 28px; }
+  .plan-strats input { accent-color: #256abf; width: 14px; height: 14px; margin: 0; } /* BLUES[4] */
+  .plan-rec { margin: 10px 0 2px; font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .plan-rec b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .plan-assump { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+  .plan-assump li { margin-top: 3px; }
+  .plan-hist { margin-top: 12px; }
+  .plan-hist > b { font-size: 12px; color: var(--ink-2); }
+  .plan-hist .hint { margin-top: 4px; }
 </style>
 </head>
 <body>
@@ -353,7 +391,7 @@
 
 <section id="tgtSec" hidden>
   <div class="shead"><h2>Monthly gross targets</h2></div>
-  <div class="desc">Pick a property, set a gross revenue target per month, and track booked gross against it. Progress comes from the same reservation data as the dashboard, sliced per month.</div>
+  <div class="desc">Click a property to open its month plan — how the month is selling, what the area is doing, and three projections with their assumptions spelled out. Then set a gross revenue target per month and track booked gross against it. Progress comes from the same reservation data as the dashboard, sliced per month.</div>
   <div id="tgtBody"><div class="empty">Loading…</div></div>
 </section>
 
@@ -484,6 +522,8 @@ document.addEventListener("keydown", e => {
   if (e.key !== "Escape") return;
   const mb = document.getElementById("modalBack");
   if (mb && !mb.hidden) { closeModal(); return; }
+  const pp = document.getElementById("planPanel");
+  if (pp && !pp.hidden) { closePlan(); return; }
   closeDetail();
 });
 
@@ -933,7 +973,7 @@ async function initTargets() {
     const sorted = [...props].sort((a, b) => String(a.property_id).localeCompare(String(b.property_id)));
     body.innerHTML = `<div class="props" id="propChips">` +
       sorted.map(p => `<button class="pchip" type="button" data-pid="${esc(p.property_id)}" aria-pressed="false">${esc(p.property_id)}</button>`).join("") +
-      `</div><div id="monthGrid"></div>`;
+      `</div><div id="planPanel" hidden></div><div id="monthGrid"></div>`;
     document.getElementById("propChips").addEventListener("click", e => {
       const chip = e.target.closest("button[data-pid]");
       if (!chip) return;
@@ -942,6 +982,7 @@ async function initTargets() {
         c.setAttribute("aria-pressed", String(c === chip));
       }
       renderMonthGrid(tgtProp);
+      openPlan(tgtProp);
     });
     // Yksi kuuntelija koko ruudukolle — renderMonthGrid vain vaihtaa sisällön.
     document.getElementById("monthGrid").addEventListener("click", e => {
@@ -1015,6 +1056,12 @@ async function saveTarget(pid, month, btn) {
     savedTargets = r.targets;
     snote.hidden = false;
     snote.textContent = r.text.split("\n")[0];
+    /* Jos saman kuukauden month plan on auki, tavoiteviiva päivittyy heti. */
+    const pp = document.getElementById("planPanel");
+    if (pp && !pp.hidden && planState.plan && planState.pid === pid && planState.month === month) {
+      drawPlanChart();
+      renderPlanTable();
+    }
     const actuals = await targetActuals();
     paintProgress(card, (actuals.months[month] || {})[pid] || 0, value);
   } catch (err) {
@@ -1025,6 +1072,388 @@ async function saveTarget(pid, month, btn) {
     btn.disabled = false; btn.textContent = "Save";
   }
 }
+
+/* ---- Month plan panel (Targets tab) ----
+   Clicking a property opens a plan for the selected month: an SVG line chart
+   of cumulative gross (actual → booked ahead → chosen projection → target
+   pace), the area context as a stat line (one axis — never a dual axis),
+   the projection's assumptions listed under the chart, and a table view.
+   The server caches each property+month+risk for 10 minutes; the first
+   build fetches recommendations + neighborhood data and takes ~5–15 s. */
+const PLAN_STRATEGIES = [
+  ["current_pace", "Current pace"],
+  ["floor_guard", "Floor guard"],
+  ["fill_push", "Fill push"],
+];
+const PLAN_LABELS = Object.fromEntries(PLAN_STRATEGIES);
+const planState = { pid: null, month: null, risk: "recommended", strategy: "current_pace", plan: null, seq: 0 };
+const planFetchCache = new Map(); // "pid|month|risk" → { at, plan }
+
+function planShortMonth(m) {
+  const [y, mm] = m.split("-").map(Number);
+  return new Date(Date.UTC(y, mm - 1, 1)).toLocaleString("en-US", { month: "short", timeZone: "UTC" });
+}
+function closePlan() {
+  const pp = document.getElementById("planPanel");
+  if (pp) pp.hidden = true;
+  hideTip();
+}
+function openPlan(pid) {
+  planState.pid = pid;
+  if (!planState.month) planState.month = nextMonths(6)[0];
+  renderPlanShell();
+  loadPlan();
+}
+function renderPlanShell() {
+  const pp = document.getElementById("planPanel");
+  if (!pp) return;
+  pp.hidden = false;
+  const months = nextMonths(6);
+  if (!months.includes(planState.month)) planState.month = months[0];
+  pp.innerHTML = `
+    <div class="dhead"><b>Month plan — ${esc(planState.pid)} · ${esc(monthLabel(planState.month))}</b>
+      <button class="dclose" type="button" aria-label="Close month plan">×</button></div>
+    <div class="plan-controls">
+      <div class="seg" role="group" aria-label="Plan month" id="planMonthSeg">${months.map(m =>
+        `<button type="button" data-month="${m}" aria-pressed="${String(m === planState.month)}">${esc(planShortMonth(m))}</button>`).join("")}
+      </div>
+      <div class="seg" role="group" aria-label="Risk preset for the cost floor" id="planRiskSeg">
+        <button type="button" data-risk="conservative" aria-pressed="${String(planState.risk === "conservative")}" title="Conservative — doubles the minimum margin">CON</button>
+        <button type="button" data-risk="recommended" aria-pressed="${String(planState.risk === "recommended")}" title="Recommended — minimum margin as configured">REC</button>
+        <button type="button" data-risk="aggressive" aria-pressed="${String(planState.risk === "aggressive")}" title="Aggressive — 40% of the minimum margin">AGG</button>
+      </div>
+    </div>
+    <div id="planContent"></div>`;
+  pp.querySelector(".dclose").addEventListener("click", closePlan);
+  document.getElementById("planMonthSeg").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-month]");
+    if (!btn || btn.dataset.month === planState.month) return;
+    planState.month = btn.dataset.month;
+    renderPlanShell();
+    loadPlan();
+  });
+  document.getElementById("planRiskSeg").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-risk]");
+    if (!btn || btn.dataset.risk === planState.risk) return;
+    planState.risk = btn.dataset.risk;
+    renderPlanShell();
+    loadPlan();
+  });
+}
+async function loadPlan() {
+  const { pid, month, risk } = planState;
+  const content = document.getElementById("planContent");
+  if (!content) return;
+  const key = pid + "|" + month + "|" + risk;
+  const seq = ++planState.seq;
+  const hit = planFetchCache.get(key);
+  if (hit && Date.now() - hit.at < 10 * 60_000) {
+    planState.plan = hit.plan;
+    renderPlanContent();
+    return;
+  }
+  content.innerHTML = `<div class="empty" id="planLoad">Building month plan…</div>
+    <div class="hint">First load fetches price recommendations and neighborhood data from Wheelhouse — usually 5–15 s. Results are cached for 10 minutes.</div>`;
+  const t0 = Date.now();
+  const tick = setInterval(() => {
+    const el = document.getElementById("planLoad");
+    if (el) el.textContent = `Building month plan… ${Math.round((Date.now() - t0) / 1000)}s`;
+  }, 1000);
+  try {
+    const plan = await api(`api/month-plan?property_id=${encodeURIComponent(pid)}&month=${encodeURIComponent(month)}&risk=${encodeURIComponent(risk)}`);
+    planFetchCache.set(key, { at: Date.now(), plan });
+    if (seq !== planState.seq) return; // the user switched selection while this loaded
+    planState.plan = plan;
+    renderPlanContent();
+  } catch (err) {
+    if (seq !== planState.seq) return;
+    content.innerHTML = `<div class="errline">Couldn’t build the month plan: ${esc(err.message)}</div>
+      <button class="btn" id="planRetry" type="button">Retry</button>`;
+    document.getElementById("planRetry").addEventListener("click", loadPlan);
+  } finally {
+    clearInterval(tick);
+  }
+}
+function planStatLine(plan) {
+  const parts = [];
+  const pr = (plan.area.pricing || []).filter(p => typeof p.median === "number");
+  if (pr.length) {
+    const meds = pr.map(p => p.median).sort((a, b) => a - b);
+    const med = meds[Math.floor(meds.length / 2)];
+    const comps = Math.max(0, ...pr.map(p => p.listings_count || 0));
+    parts.push(`Area median <b>${eur(med)}</b>/night${comps ? ` (${comps} comps)` : ""}`);
+  } else {
+    parts.push("No neighborhood pricing data for this month");
+  }
+  const recs = plan.remaining.nights.map(n => n.rec_price).filter(v => typeof v === "number");
+  if (recs.length) parts.push(`your recommendations ${eur(Math.min(...recs))}–${eur(Math.max(...recs))}`);
+  else if (plan.mode === "demo") parts.push("recommendations: demo estimate (property average rate)");
+  else if (plan.remaining.open_nights > 0) parts.push("no Wheelhouse recommendations inside this month");
+  if (plan.remaining.global_min_stay) parts.push(`min stay ${plan.remaining.global_min_stay} night${plan.remaining.global_min_stay === 1 ? "" : "s"}`);
+  parts.push(`cost floor ${eur(plan.remaining.floor)} (${esc(plan.risk)})`);
+  parts.push(`${plan.remaining.open_nights} open night${plan.remaining.open_nights === 1 ? "" : "s"} left`);
+  return parts.join('<span class="sep">·</span>');
+}
+function planHistoryHtml(plan) {
+  const h = plan.history || { items: [], notes: [] };
+  const available = h.items.filter(i => i.available);
+  const withData = available.filter(i => (i.revenue ?? 0) > 0 || (i.adr ?? 0) > 0 || (i.occupancy ?? 0) > 0);
+  let out = `<div class="plan-hist"><b>History — Wheelhouse monthly KPIs</b>`;
+  if (withData.length) {
+    out += `<div class="tablewrap" style="margin-top:6px"><table>
+      <tr><th>Month</th><th class="num">Revenue</th><th class="num">ADR</th><th class="num">Occupancy</th><th class="num">Comp set revenue</th></tr>` +
+      available.map(i => `<tr><td>${esc(monthLabel(i.month))}${i.label === "same month last year" ? " (last year)" : ""}</td>
+        <td class="num">${i.revenue != null ? eur(i.revenue) : "—"}</td>
+        <td class="num">${i.adr != null ? eur(i.adr) : "—"}</td>
+        <td class="num">${i.occupancy != null ? pct(i.occupancy * 100) : "—"}</td>
+        <td class="num">${i.comp_set && i.comp_set.revenue != null ? eur(i.comp_set.revenue) : "—"}</td></tr>`).join("") +
+      `</table></div>`;
+  }
+  for (const n of h.notes) out += `<div class="hint">${esc(n)}</div>`;
+  if (!withData.length && !h.notes.length) out += `<div class="hint">No history rows returned for the reference months.</div>`;
+  out += `</div>`;
+  return out;
+}
+function renderPlanContent() {
+  const plan = planState.plan;
+  const content = document.getElementById("planContent");
+  if (!plan || !content) return;
+  const recT = plan.recommended_targets.floor_guard;
+  const pace = plan.projections.current_pace.end_gross;
+  content.innerHTML = `
+    <div class="plan-stat">${planStatLine(plan)}</div>
+    <div class="plan-chartwrap" id="planChart"></div>
+    <div class="legend" id="planLegend"></div>
+    <div class="plan-strats" role="radiogroup" aria-label="Projection strategy">` +
+    PLAN_STRATEGIES.map(([k, label]) =>
+      `<label><input type="radio" name="planStrat" value="${k}"${k === planState.strategy ? " checked" : ""}>${label}</label>`).join("") +
+    `</div>
+    <div class="plan-rec">
+      <span>Recommended target for ${esc(monthLabel(plan.month))}: <b>${eur(recT)}</b> (floor guard) — you’re currently pacing to <b>${eur(pace)}</b>.</span>
+      <button class="btn" id="useTargetBtn" type="button">Use ${eur(recT)} as target</button>
+    </div>
+    <ul class="plan-assump" id="planAssump"></ul>
+    ${planHistoryHtml(plan)}
+    <details><summary>Table view</summary><div class="tablewrap" id="planTable" style="margin-top:8px"></div></details>`;
+  content.querySelector(".plan-strats").addEventListener("change", e => {
+    if (e.target.name !== "planStrat") return;
+    planState.strategy = e.target.value;
+    drawPlanChart();
+    renderPlanAssumptions();
+    renderPlanTable();
+  });
+  document.getElementById("useTargetBtn").addEventListener("click", () => {
+    const card = document.querySelector(`#monthGrid .mcard[data-month="${planState.month}"]`);
+    if (!card) return;
+    const input = card.querySelector("input");
+    input.value = recT;
+    const snote = card.querySelector(".snote");
+    snote.hidden = false;
+    snote.textContent = "Filled from the month plan — press Save to store it.";
+    card.scrollIntoView({ behavior: "smooth", block: "center" });
+    input.focus();
+  });
+  drawPlanChart();
+  renderPlanAssumptions();
+  renderPlanTable();
+}
+function renderPlanAssumptions() {
+  const ul = document.getElementById("planAssump");
+  const plan = planState.plan;
+  if (!ul || !plan) return;
+  const proj = plan.projections[planState.strategy];
+  const notes = [...((plan.area && plan.area.notes) || []), ...(plan.remaining.rec_note ? [plan.remaining.rec_note] : [])];
+  ul.innerHTML =
+    `<li>Selected strategy “${esc(PLAN_LABELS[planState.strategy])}”: projected month-end gross ${eur(proj.end_gross)}, net estimate ${eur(proj.end_net_estimate)} after new-night turnover costs.</li>` +
+    proj.assumptions.map(a => `<li>${esc(a)}</li>`).join("") +
+    notes.map(n => `<li>Data note: ${esc(n)}</li>`).join("");
+}
+function planNiceCeil(v) {
+  /* Kerroinlista {1,2,4,5,8,10} → myös neljännekset (akselin tickit) ovat
+     siistejä lukuja (25/50/100/125/200/250 × 10^n). */
+  if (!(v > 0)) return 100;
+  const pow = Math.pow(10, Math.floor(Math.log10(v)));
+  for (const m of [1, 2, 4, 5, 8, 10]) if (m * pow >= v) return m * pow;
+  return 10 * pow;
+}
+function drawPlanChart() {
+  const wrap = document.getElementById("planChart");
+  const plan = planState.plan;
+  if (!wrap || !plan) return;
+  const days = plan.days, N = days.length;
+  const booked = plan.actual.booked_cum;
+  const actual = plan.actual.cum; // null from today onwards
+  const proj = plan.projections[planState.strategy].series;
+  const target = savedTargetFor(planState.pid, planState.month);
+  const targetVal = target ? target.gross_target : 0;
+  let todayIdx = days.findIndex(d => d >= plan.today);
+  const pastCount = todayIdx === -1 ? N : todayIdx;
+  const monthOver = pastCount === N;
+
+  const compact = wrap.clientWidth > 0 && wrap.clientWidth < 520;
+  const W = compact ? 400 : 680, H = compact ? 230 : 260;
+  const M = { l: 46, r: compact ? 14 : 128, t: 16, b: 26 };
+  const pw = W - M.l - M.r, ph = H - M.t - M.b;
+  const ymax = planNiceCeil(Math.max(booked[N - 1] || 0, proj[N - 1] || 0, targetVal, 100) * 1.06);
+  const x = i => M.l + (N > 1 ? (i / (N - 1)) * pw : pw / 2);
+  const y = v => M.t + (1 - v / ymax) * ph;
+  const path = (from, to, arr, fn) => {
+    let d = "";
+    for (let i = from; i <= to; i++) {
+      const v = fn ? fn(i) : arr[i];
+      if (v === null || v === undefined) continue;
+      d += (d ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+    }
+    return d;
+  };
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative gross for ${esc(plan.property_id)} in ${esc(monthLabel(plan.month))}: booked, ${esc(PLAN_LABELS[planState.strategy])} projection${targetVal ? ", target pace" : ""}.">`;
+  /* Grid + y ticks (clean quarters of a nice ceiling). */
+  for (let q = 0; q <= 4; q++) {
+    const v = (ymax / 4) * q;
+    s += `<line class="pl-grid" x1="${M.l}" x2="${W - M.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/>`;
+    s += `<text class="pl-axis" x="${M.l - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end">${eur(v)}</text>`;
+  }
+  /* X ticks: day-of-month numbers. */
+  const xt = compact ? [0, 9, 19, N - 1] : [0, 4, 9, 14, 19, 24, N - 1];
+  for (const i of [...new Set(xt.filter(i => i >= 0 && i < N))]) {
+    s += `<text class="pl-axis" x="${x(i).toFixed(1)}" y="${H - 8}" text-anchor="middle">${i + 1}</text>`;
+  }
+  /* Today marker. */
+  if (pastCount > 0 && pastCount < N) {
+    s += `<line class="pl-grid" x1="${x(pastCount).toFixed(1)}" x2="${x(pastCount).toFixed(1)}" y1="${M.t}" y2="${H - M.b}"/>`;
+    s += `<text class="pl-axis" x="${x(pastCount).toFixed(1)}" y="${M.t - 4}" text-anchor="middle">today</text>`;
+  }
+  /* Target pace: straight gray dashed line to the target at month end. */
+  if (targetVal > 0) {
+    s += `<path d="M${x(0).toFixed(1)} ${y(targetVal / N).toFixed(1)}L${x(N - 1).toFixed(1)} ${y(targetVal).toFixed(1)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+  }
+  /* Projection (dashed, from today) — drawn under the actual line. */
+  if (!monthOver) {
+    s += `<path d="${path(Math.max(pastCount - 1, 0), N - 1, proj)}" fill="none" class="pl-p" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 3"/>`;
+    s += `<circle class="pl-pfill" cx="${x(N - 1).toFixed(1)}" cy="${y(proj[N - 1]).toFixed(1)}" r="4" stroke="var(--surface)" stroke-width="2"/>`;
+  }
+  /* Booked ahead (already reserved future nights) — same hue as actual, dotted. */
+  if (!monthOver) {
+    s += `<path d="${path(Math.max(pastCount - 1, 0), N - 1, booked)}" fill="none" class="pl-a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="2 4"/>`;
+    s += `<circle class="pl-afill" cx="${x(N - 1).toFixed(1)}" cy="${y(booked[N - 1]).toFixed(1)}" r="4" stroke="var(--surface)" stroke-width="2"/>`;
+  }
+  /* Actual to date (solid). */
+  if (pastCount > 0) {
+    s += `<path d="${path(0, pastCount - 1, actual)}" fill="none" class="pl-a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+    s += `<circle class="pl-afill" cx="${x(pastCount - 1).toFixed(1)}" cy="${y(actual[pastCount - 1]).toFixed(1)}" r="4" stroke="var(--surface)" stroke-width="2"/>`;
+  }
+  /* Direct end labels (wide layout only; the legend always carries identity). */
+  if (!compact) {
+    const labels = [];
+    if (monthOver) {
+      labels.push({ v: booked[N - 1] || 0, cls: "pl-afill", text: "Booked", val: eur(booked[N - 1] || 0) });
+    } else {
+      labels.push({ v: booked[N - 1] || 0, cls: "pl-afill", text: "Booked", val: eur(booked[N - 1] || 0) });
+      labels.push({ v: proj[N - 1] || 0, cls: "pl-pfill", text: PLAN_LABELS[planState.strategy], val: eur(proj[N - 1] || 0) });
+    }
+    if (targetVal > 0) labels.push({ v: targetVal, cls: "", text: "Target", val: eur(targetVal) });
+    /* ty = the true y of the line's end; y = where the label sits. When
+       collisions push a label off its anchor, a thin leader tick connects it
+       back to its line end — nudging alone would detach the label from its
+       series exactly when two lines converge (dataviz marks-and-anatomy:
+       leader lines, never bare vertical stacking). */
+    labels.forEach(l => { l.ty = y(l.v); l.y = Math.max(M.t + 5, Math.min(H - M.b - 2, l.ty)); });
+    labels.sort((a, b) => a.y - b.y);
+    for (let i = 1; i < labels.length; i++) {
+      if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+    }
+    for (const l of labels) { /* leaders first, so key-dots paint over their ends */
+      if (Math.abs(l.y - l.ty) > 2) {
+        s += `<path d="M${(W - M.r + 6).toFixed(1)} ${l.ty.toFixed(1)}L${(W - M.r + 8).toFixed(1)} ${l.y.toFixed(1)}" fill="none" stroke="var(--muted)" stroke-width="1"/>`;
+      }
+    }
+    for (const l of labels) {
+      const key = l.cls
+        ? `<circle class="${l.cls}" cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3"/>`
+        : `<circle cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3" fill="var(--muted)"/>`;
+      s += key + `<text class="pl-lab" x="${W - M.r + 15}" y="${(l.y + 3.5).toFixed(1)}">${esc(l.text)} <tspan>${l.val}</tspan></text>`;
+    }
+  }
+  /* Crosshair + hover overlay — the tooltip lists every series at that day. */
+  s += `<line id="planCross" x1="0" x2="0" y1="${M.t}" y2="${H - M.b}" stroke="var(--muted)" stroke-width="1" style="display:none" pointer-events="none"/>`;
+  s += `<rect id="planOverlay" x="${M.l}" y="${M.t}" width="${pw}" height="${ph}" fill="transparent"/>`;
+  s += `</svg>`;
+  wrap.innerHTML = s;
+
+  const svgEl = wrap.querySelector("svg");
+  const overlay = svgEl.querySelector("#planOverlay");
+  const cross = svgEl.querySelector("#planCross");
+  const areaByDate = new Map((plan.area.pricing || []).map(p => [p.date, p.median]));
+  const onMove = e => {
+    const rect = svgEl.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    let i = Math.round((px - M.l) / (N > 1 ? pw / (N - 1) : pw));
+    i = Math.max(0, Math.min(N - 1, i));
+    const cx = x(i).toFixed(1);
+    cross.setAttribute("x1", cx);
+    cross.setAttribute("x2", cx);
+    cross.style.display = "";
+    const rows = [["Booked (cum)", eur(booked[i])]];
+    if (!monthOver && i >= pastCount - 1) rows.push([PLAN_LABELS[planState.strategy] + " (cum)", eur(proj[i])]);
+    if (targetVal > 0) rows.push(["Target pace", eur((targetVal * (i + 1)) / N)]);
+    const med = areaByDate.get(days[i]);
+    if (typeof med === "number") rows.push(["Area median / night", eur(med)]);
+    showTip(e, `<b>${esc(days[i])}</b>` + rows.map(([l, v]) => `<div class="row"><span>${esc(l)}</span><span>${v}</span></div>`).join(""));
+  };
+  overlay.addEventListener("pointermove", onMove);
+  overlay.addEventListener("pointerdown", onMove);
+  overlay.addEventListener("pointerleave", () => { cross.style.display = "none"; hideTip(); });
+
+  /* Legend — always present (≥ 2 series); keys mirror the marks (line keys). */
+  const lg = document.getElementById("planLegend");
+  if (lg) {
+    const item = (cls, dash, label, muted) =>
+      `<span style="display:inline-flex;align-items:center;gap:5px"><svg width="22" height="6" aria-hidden="true"><line x1="1" y1="3" x2="21" y2="3" ${muted ? `stroke="var(--muted)"` : `class="${cls}"`} stroke-width="2.5"${dash ? ` stroke-dasharray="${dash}"` : ""}/></svg>${esc(label)}</span>`;
+    const items = [];
+    if (pastCount > 0) items.push(item("pl-a", "", "Actual (booked to date)"));
+    if (!monthOver) {
+      items.push(item("pl-a", "2 4", "Booked ahead (already reserved)"));
+      items.push(item("pl-p", "6 3", PLAN_LABELS[planState.strategy] + " projection"));
+    }
+    if (targetVal > 0) items.push(item("", "4 4", "Target pace", true));
+    lg.innerHTML = items.join("");
+  }
+}
+function renderPlanTable() {
+  const el = document.getElementById("planTable");
+  const plan = planState.plan;
+  if (!el || !plan) return;
+  const days = plan.days, N = days.length;
+  const booked = plan.actual.booked_cum;
+  const proj = plan.projections[planState.strategy].series;
+  const target = savedTargetFor(planState.pid, planState.month);
+  const targetVal = target ? target.gross_target : 0;
+  const areaByDate = new Map((plan.area.pricing || []).map(p => [p.date, p.median]));
+  const recByDate = new Map(plan.remaining.nights.map(n => [n.date, n]));
+  el.innerHTML = `<table>
+    <tr><th>Day</th><th class="num">Booked (cum)</th><th class="num">${esc(PLAN_LABELS[planState.strategy])} (cum)</th>${targetVal ? `<th class="num">Target pace</th>` : ""}<th class="num">Area median €/night</th><th class="num">Your rec €/night</th></tr>` +
+    days.map((d, i) => {
+      const med = areaByDate.get(d);
+      const n = recByDate.get(d);
+      return `<tr><td>${esc(d)}${d < plan.today ? "" : n ? " · open" : ""}</td>
+        <td class="num">${eur(booked[i])}</td>
+        <td class="num">${eur(proj[i])}</td>
+        ${targetVal ? `<td class="num">${eur((targetVal * (i + 1)) / N)}</td>` : ""}
+        <td class="num">${typeof med === "number" ? eur(med) : "—"}</td>
+        <td class="num">${n && typeof n.rec_price === "number" ? eur(n.rec_price) : "—"}</td></tr>`;
+    }).join("") + `</table>`;
+}
+/* Redraw the chart when the viewport crosses the compact threshold. */
+let planResizeT = null;
+addEventListener("resize", () => {
+  clearTimeout(planResizeT);
+  planResizeT = setTimeout(() => {
+    const pp = document.getElementById("planPanel");
+    if (pp && !pp.hidden && planState.plan) drawPlanChart();
+  }, 200);
+});
 
 /* ---- Alerts ---- */
 let alertsInited = false;
