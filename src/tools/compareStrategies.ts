@@ -123,11 +123,14 @@ export function formatComparison(
   sourceLabel: string,
   dataNote: string,
   isDefaultWindow = false,
+  monthEndNote?: string,
 ): string {
   const [base, a, b] = scenarios;
 
   const parts: string[] = [];
-  parts.push(`## Strategy comparison ${from} → ${to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`);
+  const windowLine = `## Strategy comparison ${from} → ${to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`;
+  // KUUNLOPPU-ANSA: huomautus ikkunarivin yhteydessä (ei laskentaan vaikutusta).
+  parts.push(monthEndNote ? `${windowLine}\n${monthEndNote}` : windowLine);
   parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
   parts.push(
     `${scenarioTable(scenarios)}\n_Turnovers = number of bookings touching the period._\n` +
@@ -157,7 +160,7 @@ export function formatComparison(
 }
 
 export async function runCompareStrategies(args: CompareArgs): Promise<string> {
-  const { from, to, isDefault } = resolveWindow(args.from, args.to);
+  const { from, to, isDefault, monthEndNote } = resolveWindow(args.from, args.to);
   const discountPct = args.discount_pct ?? 40;
   const minStay = args.min_stay ?? 3;
   const upliftPct = args.uplift_pct ?? 10;
@@ -205,5 +208,5 @@ export async function runCompareStrategies(args: CompareArgs): Promise<string> {
 
   const dataNote =
     `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
-  return formatComparison(scenarios, from, to, costSource.label, dataNote, isDefault);
+  return formatComparison(scenarios, from, to, costSource.label, dataNote, isDefault, monthEndNote);
 }

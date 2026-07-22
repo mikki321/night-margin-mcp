@@ -361,7 +361,24 @@ describe("apply_decision — dry run ja turvasäännöt", () => {
       sunday: 95,
     });
     expect(out).toContain('apply_decision {"decision_id": "d1", "confirm": true}');
+    // Löydös 2: end_date-selvennys payload-lohkon ALLA, ei JSONin sisällä.
+    expect(out).toContain("(end_date is exclusive — the last night written is 2026-06-30.)");
+    expect(out).not.toContain('"(end_date');
     expect(readDecisions(e)[0].status).toBe("proposed"); // ei muutosta
+  });
+
+  it("dry run: end_date-selvennysrivi laskee viimeisen yön rangen end_datesta (löydös 2)", async () => {
+    const e = whEnv();
+    seedDecision(e, {
+      dates: [
+        "2026-08-01", "2026-08-02", "2026-08-03", "2026-08-04", "2026-08-05",
+        "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10", "2026-08-11",
+      ],
+    });
+    const out = await runApplyDecision({ decision_id: "d1" }, e);
+
+    expect(out).toContain('"end_date": "2026-08-12"');
+    expect(out).toContain("(end_date is exclusive — the last night written is 2026-08-11.)");
   });
 
   it("dry_run=true voittaa vaikka confirm=true", async () => {

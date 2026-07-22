@@ -1,13 +1,19 @@
 import { z } from "zod";
+import { parseISODate } from "../core/calc.js";
 import { datesToRanges } from "../core/decisions.js";
 import { type Decision, acquireStateLock, readDecisions, writeDecisions } from "../state.js";
 import { CUSTOM_RATE_WEEKDAYS, WheelhouseClient } from "../wheelhouse/client.js";
+
+const MS_PER_DAY = 86_400_000;
 
 const eur = (n: number): string => {
   const v = Math.round(n);
   const s = Math.abs(v).toLocaleString("en-US");
   return v < 0 ? `-€${s}` : `€${s}`;
 };
+const iso = (t: number): string => new Date(t).toISOString().slice(0, 10);
+/** end_date on aina eksklusiivinen (löydös 2) — viimeinen kirjoitettu yö = end_date − 1 pv. */
+const lastNightOf = (endDate: string): string => iso(parseISODate(endDate) - MS_PER_DAY);
 
 /** Zod-skeema — index.ts rekisteröi tämän sellaisenaan. */
 export const applyDecisionInputSchema = {
@@ -103,8 +109,14 @@ export async function runApplyDecision(
   // eikä kirjoita mitään — demopolku (mock-tila ilman avainta) toimii aina.
   const dryRun = args.dry_run ?? args.confirm !== true;
   if (dryRun || args.confirm !== true) {
+    // Löydös 2 (judge-sim v2): huomautus ALLE payloadin (ei JSONin sisään) —
+    // end_date on eksklusiivinen, viimeinen kirjoitettu yö on end_date − 1 pv.
     const payloadBlocks = payloads
-      .map((p) => `PUT ${urlPath}\n${JSON.stringify(p, null, 2)}`)
+      .map(
+        (p, i) =>
+          `PUT ${urlPath}\n${JSON.stringify(p, null, 2)}\n` +
+          `(end_date is exclusive — the last night written is ${lastNightOf(ranges[i].end_date)}.)`,
+      )
       .join("\n\n");
     // Osittaisen kirjoituksen retry-tila: aiempi apply ehti kirjoittaa osan
     // rangeista ennen virhettä → esikatselu ei saa väittää ettei mitään ole

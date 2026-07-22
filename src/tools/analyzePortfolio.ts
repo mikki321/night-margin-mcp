@@ -61,13 +61,16 @@ export function formatAnalysis(
   dataNote: string,
   isDefaultWindow = false,
   targetsSection?: string,
+  monthEndNote?: string,
 ): string {
   const bottom = a.properties.slice(0, 10);
   const top = [...a.properties].slice(-5).reverse();
   const worst = a.properties[0];
 
   const parts: string[] = [];
-  parts.push(`## Portfolio ${a.from} → ${a.to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`);
+  const windowLine = `## Portfolio ${a.from} → ${a.to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`;
+  // KUUNLOPPU-ANSA: huomautus ikkunarivin yhteydessä (ei laskentaan vaikutusta).
+  parts.push(monthEndNote ? `${windowLine}\n${monthEndNote}` : windowLine);
   parts.push(`Cost source: ${sourceLabel}${dataNote ? ` · ${dataNote}` : ""}`);
 
   // Kipu ensin: vuotolause on ensimmäinen sisältörivi otsikon + lähderivin jälkeen.
@@ -137,7 +140,7 @@ export interface AnalyzeArgs {
 }
 
 export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
-  const { from, to, isDefault } = resolveWindow(args.from, args.to);
+  const { from, to, isDefault, monthEndNote } = resolveWindow(args.from, args.to);
   const costSource = costSourceFromEnv(process.env, args.avg_turnover_cost);
   const reservationSource = reservationSourceFromEnv(process.env);
 
@@ -167,5 +170,5 @@ export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
     targetsSection = undefined;
   }
 
-  return formatAnalysis(analysis, costSource.label, dataNote, isDefault, targetsSection);
+  return formatAnalysis(analysis, costSource.label, dataNote, isDefault, targetsSection, monthEndNote);
 }

@@ -285,6 +285,24 @@ describe("formatComparison", () => {
       `## Strategy comparison ${FROM} → ${TO} (default window: last 30 + next 90 days — pass from/to to change)`,
     );
   });
+
+  it("KUUNLOPPU-ANSA: monthEndNote näkyy ikkunarivin yhteydessä kun annettu", () => {
+    const { reservations, costs } = fixture();
+    const base = analyzePortfolio(reservations, costs, FROM, TO);
+    const scenario = { label: "Baseline", analysis: base, turnovers: countTurnovers(reservations, FROM, TO) };
+    const note =
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.";
+    const text = formatComparison(
+      [scenario, scenario, scenario],
+      "2026-08-01",
+      "2026-08-31",
+      "manual (test)",
+      "",
+      false,
+      note,
+    );
+    expect(text).toContain(`## Strategy comparison 2026-08-01 → 2026-08-31\n${note}`);
+  });
 });
 
 describe("demon jännite mock-datalla (40 % ale)", () => {

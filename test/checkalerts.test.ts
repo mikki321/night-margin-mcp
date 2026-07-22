@@ -137,6 +137,19 @@ describe("check_alerts — floor-hälytys", () => {
 
     expect(out).toBe("All clear — no gap nights below floor, no new bookings since the last check.");
   });
+
+  it("floor-hälytys mutta ei uusia varauksia (post-baseline-ajo) → eksplisiittinen 'no new bookings' -rivi", async () => {
+    // Korotettu AVG_TURNOVER_COST synnyttää floor-hälytyksen (kuten yllä),
+    // mutta tämä on TOINEN ajo samalla mock-datalla → ei uusia varauksia.
+    // Löydös 3: floorLine ei saa "varastaa" all-clear-lausetta hiljaisuudella.
+    const e = { ...env, AVG_TURNOVER_COST: "200" } as NodeJS.ProcessEnv;
+    await runCheckAlerts({ send: false }, e, { now: NOW });
+    const out = await runCheckAlerts({ send: false }, e, { now: NOW });
+
+    expect(out).toContain("priced below your cost floor — run propose_decisions to review.");
+    expect(out).toContain("No new bookings since the last check.");
+    expect(out).not.toContain("Baseline recorded");
+  });
 });
 
 describe("check_alerts — send-parametri ja notify-integraatio", () => {

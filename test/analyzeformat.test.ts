@@ -169,4 +169,22 @@ describe("formatAnalysis — kipu ensin", () => {
     const withoutNote = formatAnalysis(a, "manual (test)", "");
     expect(withoutNote).not.toContain("default window");
   });
+
+  it("KUUNLOPPU-ANSA: monthEndNote näkyy ikkunarivin yhteydessä kun annettu", () => {
+    const reservations = [res("r1", "p1", "2026-08-01", "2026-08-11", 10, 1500)];
+    const costs = costMap(cost("r1", 70));
+    const a = analyzePortfolio(reservations, costs, "2026-08-01", "2026-08-31");
+
+    const note =
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.";
+    const text = formatAnalysis(a, "manual (test)", "", false, undefined, note);
+    const lines = contentLines(text);
+
+    expect(lines[0]).toBe("## Portfolio 2026-08-01 → 2026-08-31");
+    expect(lines[1]).toBe(note);
+
+    // Ei laskentaan vaikutusta — pelkkä huomautusrivi.
+    const withoutNote = formatAnalysis(a, "manual (test)", "");
+    expect(withoutNote).not.toContain("is exclusive");
+  });
 });

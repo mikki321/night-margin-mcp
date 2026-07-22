@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { DEFAULT_WINDOW_NOTE, defaultWindow, resolveWindow } from "../src/config.js";
+import {
+  DEFAULT_WINDOW_NOTE,
+  defaultWindow,
+  isLastDayOfMonth,
+  monthEndExclusiveNote,
+  resolveWindow,
+} from "../src/config.js";
 import { analyzePortfolioInputSchema } from "../src/tools/analyzePortfolio.js";
 import { compareStrategiesInputSchema } from "../src/tools/compareStrategies.js";
 
@@ -104,6 +110,83 @@ describe("DEFAULT_WINDOW_NOTE", () => {
   it("on täsmälleen sovittu englanninkielinen huomautus", () => {
     expect(DEFAULT_WINDOW_NOTE).toBe(
       " (default window: last 30 + next 90 days — pass from/to to change)",
+    );
+  });
+});
+
+describe("KUUNLOPPU-ANSA — isLastDayOfMonth / monthEndExclusiveNote", () => {
+  it("2026-08-31 on elokuun viimeinen päivä", () => {
+    expect(isLastDayOfMonth("2026-08-31")).toBe(true);
+  });
+
+  it("2026-09-01 ei ole minkään kuukauden viimeinen päivä", () => {
+    expect(isLastDayOfMonth("2026-09-01")).toBe(false);
+  });
+
+  it("helmikuu ei-karkausvuonna: 28. on viimeinen, 27. ei ole", () => {
+    expect(isLastDayOfMonth("2027-02-28")).toBe(true);
+    expect(isLastDayOfMonth("2027-02-27")).toBe(false);
+  });
+
+  it("helmikuu karkausvuonna: 29. on viimeinen, 28. EI ole", () => {
+    expect(isLastDayOfMonth("2028-02-29")).toBe(true);
+    expect(isLastDayOfMonth("2028-02-28")).toBe(false);
+  });
+
+  it("monthEndExclusiveNote — täsmällinen teksti", () => {
+    expect(monthEndExclusiveNote("2026-08-31")).toBe(
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.",
+    );
+    expect(monthEndExclusiveNote("2028-02-29")).toBe(
+      "Note: to=2028-02-29 is exclusive — the night of Feb 29 is not included. Use to=2028-03-01 for the full month.",
+    );
+  });
+});
+
+describe("KUUNLOPPU-ANSA — resolveWindow.monthEndNote", () => {
+  it("to=2026-08-31 (molemmat annettu) → monthEndNote asetettu", () => {
+    const r = resolveWindow("2026-08-01", "2026-08-31", NOW);
+    expect(r.monthEndNote).toBe(
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.",
+    );
+  });
+
+  it("to=2026-09-01 → ei notea", () => {
+    const r = resolveWindow("2026-08-01", "2026-09-01", NOW);
+    expect(r.monthEndNote).toBeUndefined();
+  });
+
+  it("vain to=2026-08-31 annettu → monthEndNote asetettu silti", () => {
+    const r = resolveWindow(undefined, "2026-08-31", NOW);
+    expect(r.monthEndNote).toBe(
+      "Note: to=2026-08-31 is exclusive — the night of Aug 31 is not included. Use to=2026-09-01 for the full month.",
+    );
+  });
+
+  it("vain from annettu → to on LASKETTU, ei koskaan notea vaikka osuisi kuun loppuun", () => {
+    // from + 120 pv voisi sattumalta osua kuun viimeiselle päivälle — silti ei
+    // notea, koska käyttäjä ei antanut to:ta itse.
+    const r = resolveWindow("2026-08-01", undefined, NOW);
+    expect(r.monthEndNote).toBeUndefined();
+  });
+
+  it("oletusikkuna (molemmat puuttuu) → ei koskaan notea", () => {
+    const r = resolveWindow(undefined, undefined, NOW);
+    expect(r.monthEndNote).toBeUndefined();
+    expect(r.isDefault).toBe(true);
+  });
+
+  it("helmikuu karkausvuonna to:ssa (molemmat annettu) → nightistä puhutaan Feb 29", () => {
+    const r = resolveWindow("2028-02-01", "2028-02-29", NOW);
+    expect(r.monthEndNote).toBe(
+      "Note: to=2028-02-29 is exclusive — the night of Feb 29 is not included. Use to=2028-03-01 for the full month.",
+    );
+  });
+
+  it("helmikuu ei-karkausvuonna to:ssa → Feb 28", () => {
+    const r = resolveWindow("2027-02-01", "2027-02-28", NOW);
+    expect(r.monthEndNote).toBe(
+      "Note: to=2027-02-28 is exclusive — the night of Feb 28 is not included. Use to=2027-03-01 for the full month.",
     );
   });
 });
