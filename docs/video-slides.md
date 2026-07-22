@@ -11,7 +11,7 @@ Final copy for the four slides used in the Loom video (see `docs/video-script.md
 - I run 73 short-term rentals in Lapland. My revenue tool optimizes gross.
 - Revenue tools see ADR, RevPAR, occupancy — not cleaning, laundry, travel.
 - A 2-night and a 7-night booking consume the same cleaning.
-- The missing metric: **net per available night**.
+- The missing metric: **net per available night** — night-margin is the margin guard that protects it.
 
 ---
 
@@ -59,6 +59,8 @@ June 2026, demo portfolio — same bookings, three strategies:
 ## Slide 4 — Roadmap + install (2:05 / 2:20)
 
 **Install it today**
+
+*Wheelhouse optimizes what guests pay. night-margin protects what you keep.*
 
 ```
 claude mcp add margin -- npx -y night-margin-mcp

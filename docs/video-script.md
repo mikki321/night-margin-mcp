@@ -10,7 +10,7 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 **[SCREEN: Slide 1 ("Nobody knows what a night costs to produce") + Loom camera bubble on.]**
 
-> I run seventy-three short-term rentals in Lapland. My revenue tool optimizes gross — and it's good at it. But nobody knows what a night costs to produce. Cleaning, laundry, travel. So I built night-margin: an MCP server that prices every decision net of turnover costs, right inside Claude.
+> I run seventy-three short-term rentals in Lapland. My revenue tool optimizes gross — and it's good at it. But nobody knows what a night costs to produce. Cleaning, laundry, travel. So I built night-margin — the margin guard that nets every decision against turnover cost, right inside Claude.
 
 ## (0:20 – 0:45) Install — under 60 seconds
 
@@ -54,7 +54,7 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 **[SCREEN: Slide 4 (or hold it from Version B): positioning line + install command + GitHub/demo links.]**
 
-> night-margin is built by a property manager who runs seventy-three listings in Lapland — for operators like us. It's on npm today: claude mcp add margin.
+> night-margin protects what you keep — built by a property manager who runs seventy-three listings in Lapland, for operators like us. It's on npm today: claude mcp add margin.
 
 ---
 

@@ -10,13 +10,15 @@ night-margin-mcp — Margin Engine
 
 ## One-liner
 
-An MCP server that shows every Wheelhouse pricing decision net of turnover costs — the metric revenue tools miss: **net per available night**.
+The margin guard for Wheelhouse pricing: an MCP server that nets every decision against turnover costs — the metric revenue tools miss, **net per available night**.
 
 ## Description (~150 words)
 
+Wheelhouse optimizes what guests pay. night-margin protects what you keep.
+
 Wheelhouse tells you the right price for every night — but no revenue tool knows what a night costs to *produce*. A 2-night and a 7-night booking consume the same cleaning, so gross revenue can climb while margin leaks out through short stays and discounted gap nights.
 
-night-margin-mcp is an MCP server that shows every pricing decision net of turnover costs. It pulls live listings and reservations from the Wheelhouse RM API, attaches per-booking turnover costs (flat average, CSV, or an ops-platform API), and computes one honest metric: net per available night. Three tools: `analyze_portfolio` finds where money leaks, `compare_strategies` puts gross and net in the same picture, `gap_night_check` gives a fill-or-skip verdict with a floor price.
+night-margin-mcp is the margin guard for that gap: an MCP server that shows every pricing decision net of turnover costs. It pulls live listings and reservations from the Wheelhouse RM API, attaches per-booking turnover costs (flat average, CSV, or an ops-platform API), and computes one honest metric: net per available night. Three tools: `analyze_portfolio` finds where money leaks, `compare_strategies` puts gross and net in the same picture, `gap_night_check` gives a fill-or-skip verdict with a floor price.
 
 The demo scenario says it all: filling gap nights at 40% off lifts occupancy to 99% and adds €3,977 gross — while net *drops* €433.
 
