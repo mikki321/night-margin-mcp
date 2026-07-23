@@ -319,6 +319,16 @@
     white-space: nowrap;
     transition: background var(--t), color var(--t), box-shadow var(--t);
   }
+  .tgt-filter { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+  .tgt-filter input {
+    flex: 1 1 260px; max-width: 360px; font: inherit; font-size: 13px;
+    padding: 8px 12px; min-height: 36px; border: 1px solid var(--border);
+    border-radius: var(--r-md); background: var(--surface); color: var(--ink);
+  }
+  .tgt-filter input:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
+  .tgt-count { font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pchip[hidden] { display: none; }
+  .pchip[data-booked="0"] { color: var(--muted); }
   .pchip:hover { background: var(--mid); color: var(--ink); }
   .pchip[aria-pressed="true"] { background: var(--mid); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--ink); }
   .pchip:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
@@ -425,7 +435,7 @@
     <button type="button" role="tab" data-tab="alerts" aria-selected="false">Alerts</button>
   </nav>
   <div class="hero" id="hero"><span class="skel" style="width:220px;height:56px;border-radius:12px"></span></div>
-  <p class="tagline">What your calendar hides: the profit left after every turnover cost.</p>
+  <p class="tagline" id="tagline">What your calendar hides: the profit left after every turnover cost.</p>
   <div class="sub" id="meta"><span class="skel" style="width:min(420px,80%);height:13px"></span></div>
 </header>
 
@@ -461,7 +471,7 @@
       <button type="button" data-sort="name" aria-pressed="false">Name</button>
     </div>
   </div>
-  <div class="desc">Color = net € per available night — red is a loss, gray near zero, deeper blue is better. Thin bar = occupancy. Tap or hover a tile for details.</div>
+  <div class="desc" id="mapDesc">Color = net € per available night — red is a loss, gray near zero, deeper blue is better. Thin bar = occupancy. Tap or hover a tile for details.</div>
   <div class="map" id="map" role="group" aria-labelledby="mapTitle">
     <div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div>
   </div>
@@ -689,11 +699,27 @@ function renderDashboard(d) {
     covEl.hidden = true;
   }
 
-  const max = Math.max(...a.properties.map(p => p.net_per_available_night), 1);
+  // Lämpökartta näyttää VAIN varauksia saaneet kohteet — livenä 60/73 oli €0/0
+  // varattua yötä, mikä hukutti kartan tyhjiin ruutuihin. Koko 73 kohteen lista
+  // on yhä "Table view" -osiossa alla.
+  const shownProps = a.properties.filter(p => p.booked_nights > 0);
+  const hiddenCount = a.properties.length - shownProps.length;
+  const mapDesc = document.getElementById("mapDesc");
+  if (mapDesc) {
+    mapDesc.innerHTML =
+      `Color = net € per available night — red is a loss, gray near zero, deeper blue is better. Thin bar = occupancy. Tap or hover a tile for details.` +
+      (hiddenCount > 0
+        ? ` <span style="color:var(--muted)">Showing the ${shownProps.length} with bookings; ${hiddenCount} unbooked ${hiddenCount === 1 ? "listing is" : "listings are"} in Table view below.</span>`
+        : "");
+  }
+  const max = Math.max(...shownProps.map(p => p.net_per_available_night), 1);
   const map = document.getElementById("map");
   map.innerHTML = "";
+  if (shownProps.length === 0) {
+    map.innerHTML = `<div class="empty" style="grid-column:1/-1">No properties had bookings in this window — nothing to map. See Table view for the full list.</div>`;
+  }
   const cells = [];
-  for (const p of a.properties) {
+  for (const p of shownProps) {
     p.occ = p.available_nights ? (p.booked_nights / p.available_nights) * 100 : 0;
     const c = cellColor(p.net_per_available_night, max);
     const el = document.createElement("div");
@@ -725,9 +751,9 @@ function renderDashboard(d) {
     map.appendChild(el);
   }
 
-  /* Sort segmented control. */
+  /* Sort segmented control — piilota jos ei ruutuja järjesteltävänä. */
   const seg = document.getElementById("sortSeg");
-  seg.hidden = false;
+  seg.hidden = shownProps.length === 0;
   const SORTS = {
     net: (x, y) => x.p.net_per_available_night - y.p.net_per_available_night, // worst first — the story
     occ: (x, y) => x.p.occ - y.p.occ,
@@ -860,7 +886,7 @@ function startElapsed(btn, label) {
 
 /* ---- Tabs ---- */
 const VIEWS = {
-  dash: ["hero", "meta", "kpis", "coverage", "rankSec", "triSec", "mapSec"],
+  dash: ["hero", "tagline", "meta", "kpis", "coverage", "rankSec", "triSec", "mapSec"],
   copilot: ["copilotSec"],
   dec: ["decSec"],
   tgt: ["tgtSec"],
@@ -1179,10 +1205,39 @@ async function initTargets() {
     ]);
     tgtInited = true;
     savedTargets = tg.targets;
-    const sorted = [...props].sort((a, b) => String(a.property_id).localeCompare(String(b.property_id)));
-    body.innerHTML = `<div class="props" id="propChips">` +
-      sorted.map(p => `<button class="pchip" type="button" data-pid="${esc(p.property_id)}" aria-pressed="false">${esc(p.property_id)}</button>`).join("") +
+    const hasTarget = pid => savedTargets.some(t => t.property_id === pid);
+    // Järjestys: varauksia saaneet ensin (ne ovat toiminnan kohteita), sitten
+    // aakkosjärjestys. 73 kohteen litteä lista oli seka — nyt haettavissa.
+    const sorted = [...props].sort((a, b) => {
+      const ab = (a.booked_nights > 0 ? 0 : 1), bb = (b.booked_nights > 0 ? 0 : 1);
+      if (ab !== bb) return ab - bb;
+      return String(a.property_id).localeCompare(String(b.property_id));
+    });
+    const bookedCount = sorted.filter(p => p.booked_nights > 0).length;
+    body.innerHTML =
+      `<div class="tgt-filter"><input type="search" id="tgtFilter" placeholder="Filter ${sorted.length} properties…" autocomplete="off" aria-label="Filter properties"><span id="tgtFilterCount" class="tgt-count"></span></div>` +
+      `<div class="props" id="propChips">` +
+      sorted.map(p => {
+        const booked = p.booked_nights > 0;
+        return `<button class="pchip" type="button" data-pid="${esc(p.property_id)}" data-booked="${booked ? 1 : 0}" aria-pressed="false" title="${booked ? `${p.booked_nights} booked nights this window` : "no bookings this window"}">${hasTarget(p.property_id) ? "● " : ""}${esc(p.property_id)}</button>`;
+      }).join("") +
       `</div><div id="planPanel" hidden></div><div id="monthGrid"></div>`;
+    // Hakusuodatin: piilottaa ei-osuvat kilvet, päivittää laskurin.
+    const filterEl = document.getElementById("tgtFilter");
+    const countEl = document.getElementById("tgtFilterCount");
+    const chipsAll = [...document.querySelectorAll("#propChips .pchip")];
+    const applyFilter = () => {
+      const q = filterEl.value.trim().toLowerCase();
+      let shown = 0;
+      for (const c of chipsAll) {
+        const hit = !q || c.dataset.pid.toLowerCase().includes(q);
+        c.hidden = !hit;
+        if (hit) shown++;
+      }
+      countEl.textContent = q ? `${shown} match${shown === 1 ? "" : "es"}` : `${bookedCount} with bookings · ${sorted.length - bookedCount} without`;
+    };
+    filterEl.addEventListener("input", applyFilter);
+    applyFilter();
     document.getElementById("propChips").addEventListener("click", e => {
       const chip = e.target.closest("button[data-pid]");
       if (!chip) return;
