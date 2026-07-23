@@ -1,202 +1,121 @@
 {
- "generated_at": "2026-07-22T06:53:22.590Z",
+ "generated_at": "2026-07-23T22:52:42.393Z",
  "window": {
-  "from": "2026-06-01",
-  "to": "2026-09-01"
+  "from": "2026-07-01",
+  "to": "2026-10-01"
  },
  "sources": {
   "reservations": "synthetic demo data (set WHEELHOUSE_API_KEY to analyze your own portfolio)",
-  "costs": "csv (examples/sample-costs.csv, 887 rows)",
-  "attribution": "Cost attribution: 224/224 bookings matched by reservation_id"
+  "costs": "manual (€70/turnover)",
+  "attribution": ""
  },
  "analysis": {
-  "from": "2026-06-01",
-  "to": "2026-09-01",
+  "from": "2026-07-01",
+  "to": "2026-10-01",
   "properties": [
    {
     "property_id": "demo-1br-03",
-    "booked_nights": 45,
-    "gap_nights": 47,
+    "booked_nights": 40,
+    "gap_nights": 52,
     "available_nights": 92,
-    "gross": 3699.4285714285716,
-    "costs": 1415,
-    "net": 2284.4285714285716,
-    "net_per_available_night": 24.830745341614907
-   },
-   {
-    "property_id": "demo-1br-01",
-    "booked_nights": 52,
-    "gap_nights": 40,
-    "available_nights": 92,
-    "gross": 4138,
-    "costs": 1427,
-    "net": 2711,
-    "net_per_available_night": 29.467391304347824
+    "gross": 3358.2,
+    "costs": 1190,
+    "net": 2168.2,
+    "net_per_available_night": 23.567391304347826
    },
    {
     "property_id": "demo-1br-02",
-    "booked_nights": 44,
-    "gap_nights": 48,
+    "booked_nights": 40,
+    "gap_nights": 52,
     "available_nights": 92,
-    "gross": 4218,
-    "costs": 1344,
-    "net": 2874,
-    "net_per_available_night": 31.23913043478261
+    "gross": 3976,
+    "costs": 1190,
+    "net": 2786,
+    "net_per_available_night": 30.282608695652176
+   },
+   {
+    "property_id": "demo-1br-01",
+    "booked_nights": 50,
+    "gap_nights": 42,
+    "available_nights": 92,
+    "gross": 3962,
+    "costs": 1120,
+    "net": 2842,
+    "net_per_available_night": 30.891304347826086
    },
    {
     "property_id": "demo-2br-04",
-    "booked_nights": 66,
-    "gap_nights": 26,
+    "booked_nights": 64,
+    "gap_nights": 28,
     "available_nights": 92,
-    "gross": 8481.466666666667,
-    "costs": 2966,
-    "net": 5515.466666666667,
-    "net_per_available_night": 59.95072463768116
+    "gross": 7718,
+    "costs": 2310,
+    "net": 5408,
+    "net_per_available_night": 58.78260869565217
    },
    {
     "property_id": "demo-2br-05",
-    "booked_nights": 71,
-    "gap_nights": 21,
+    "booked_nights": 77,
+    "gap_nights": 15,
     "available_nights": 92,
-    "gross": 8829,
-    "costs": 3280,
-    "net": 5549,
-    "net_per_available_night": 60.31521739130435
-   },
-   {
-    "property_id": "demo-3br-07",
-    "booked_nights": 70,
-    "gap_nights": 22,
-    "available_nights": 92,
-    "gross": 11480,
-    "costs": 4693,
-    "net": 6787,
-    "net_per_available_night": 73.77173913043478
+    "gross": 10132,
+    "costs": 2310,
+    "net": 7822,
+    "net_per_available_night": 85.02173913043478
    },
    {
     "property_id": "demo-2br-06",
     "booked_nights": 77,
     "gap_nights": 15,
     "available_nights": 92,
-    "gross": 10519,
-    "costs": 3242,
-    "net": 7277,
-    "net_per_available_night": 79.09782608695652
+    "gross": 10868,
+    "costs": 2030,
+    "net": 8838,
+    "net_per_available_night": 96.06521739130434
+   },
+   {
+    "property_id": "demo-3br-07",
+    "booked_nights": 70,
+    "gap_nights": 22,
+    "available_nights": 92,
+    "gross": 11768.5,
+    "costs": 2660,
+    "net": 9108.5,
+    "net_per_available_night": 99.0054347826087
    },
    {
     "property_id": "demo-3br-08",
     "booked_nights": 92,
     "gap_nights": 0,
     "available_nights": 92,
-    "gross": 19309,
-    "costs": 5164,
-    "net": 14145,
-    "net_per_available_night": 153.75
+    "gross": 19038.25,
+    "costs": 2590,
+    "net": 16448.25,
+    "net_per_available_night": 178.78532608695653
    }
   ],
   "totals": {
-   "booked_nights": 517,
-   "gap_nights": 219,
+   "booked_nights": 510,
+   "gap_nights": 226,
    "available_nights": 736,
-   "gross": 70673.89523809524,
-   "costs": 23531,
-   "net": 47142.89523809524,
-   "net_per_available_night": 64.05284679089027,
-   "occupancy_pct": 70.24456521739131
+   "gross": 70820.95,
+   "costs": 15400,
+   "net": 55420.95,
+   "net_per_available_night": 75.30020380434782,
+   "occupancy_pct": 69.29347826086956
   },
-  "leak_eur": 1686,
-  "leak_nights": 53,
-  "leak_pct": 10.251450676982591,
+  "leak_eur": 223,
+  "leak_nights": 15,
+  "leak_pct": 2.941176470588235,
   "negative_reservations": [
    {
-    "reservation_id": "demo-3br-07-r56",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-06-05",
-    "nights": 1,
-    "gross": 73,
-    "costs": 145,
-    "net": -72
-   },
-   {
-    "reservation_id": "demo-3br-07-r82",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-08-09",
-    "nights": 1,
-    "gross": 73,
-    "costs": 136,
-    "net": -63
-   },
-   {
-    "reservation_id": "demo-3br-07-r71",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-07-16",
-    "nights": 1,
-    "gross": 75,
-    "costs": 135,
-    "net": -60
-   },
-   {
-    "reservation_id": "demo-2br-05-r83",
-    "property_id": "demo-2br-05",
-    "checkin": "2026-08-21",
-    "nights": 1,
-    "gross": 52,
-    "costs": 106,
-    "net": -54
-   },
-   {
-    "reservation_id": "demo-2br-05-r79",
-    "property_id": "demo-2br-05",
-    "checkin": "2026-08-08",
-    "nights": 1,
-    "gross": 55,
-    "costs": 108,
-    "net": -53
-   },
-   {
-    "reservation_id": "demo-3br-07-r88",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-08-27",
-    "nights": 1,
-    "gross": 76,
-    "costs": 129,
-    "net": -53
-   },
-   {
-    "reservation_id": "demo-1br-01-r36",
+    "reservation_id": "demo-1br-01-r45",
     "property_id": "demo-1br-01",
-    "checkin": "2026-06-09",
+    "checkin": "2026-07-26",
     "nights": 1,
-    "gross": 31,
-    "costs": 80,
-    "net": -49
-   },
-   {
-    "reservation_id": "demo-3br-07-r85",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-08-19",
-    "nights": 1,
-    "gross": 81,
-    "costs": 130,
-    "net": -49
-   },
-   {
-    "reservation_id": "demo-2br-06-r57",
-    "property_id": "demo-2br-06",
-    "checkin": "2026-06-01",
-    "nights": 1,
-    "gross": 68,
-    "costs": 116,
-    "net": -48
-   },
-   {
-    "reservation_id": "demo-3br-07-r68",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-07-06",
-    "nights": 1,
-    "gross": 90,
-    "costs": 138,
-    "net": -48
+    "gross": 33,
+    "costs": 70,
+    "net": -37
    },
    {
     "reservation_id": "demo-1br-01-r51",
@@ -204,116 +123,8 @@
     "checkin": "2026-08-24",
     "nights": 1,
     "gross": 37,
-    "costs": 84,
-    "net": -47
-   },
-   {
-    "reservation_id": "demo-2br-04-r47",
-    "property_id": "demo-2br-04",
-    "checkin": "2026-06-21",
-    "nights": 1,
-    "gross": 67,
-    "costs": 114,
-    "net": -47
-   },
-   {
-    "reservation_id": "demo-3br-07-r87",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-08-25",
-    "nights": 1,
-    "gross": 86,
-    "costs": 133,
-    "net": -47
-   },
-   {
-    "reservation_id": "demo-2br-04-r55",
-    "property_id": "demo-2br-04",
-    "checkin": "2026-07-13",
-    "nights": 1,
-    "gross": 56,
-    "costs": 102,
-    "net": -46
-   },
-   {
-    "reservation_id": "demo-3br-07-r69",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-07-07",
-    "nights": 1,
-    "gross": 90,
-    "costs": 136,
-    "net": -46
-   },
-   {
-    "reservation_id": "demo-3br-08-r84",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-07-08",
-    "nights": 1,
-    "gross": 88,
-    "costs": 134,
-    "net": -46
-   },
-   {
-    "reservation_id": "demo-1br-01-r45",
-    "property_id": "demo-1br-01",
-    "checkin": "2026-07-26",
-    "nights": 1,
-    "gross": 33,
-    "costs": 76,
-    "net": -43
-   },
-   {
-    "reservation_id": "demo-3br-07-r62",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-06-22",
-    "nights": 1,
-    "gross": 86,
-    "costs": 128,
-    "net": -42
-   },
-   {
-    "reservation_id": "demo-1br-01-r34",
-    "property_id": "demo-1br-01",
-    "checkin": "2026-05-31",
-    "nights": 1,
-    "gross": 37,
-    "costs": 78,
-    "net": -41
-   },
-   {
-    "reservation_id": "demo-2br-04-r59",
-    "property_id": "demo-2br-04",
-    "checkin": "2026-07-24",
-    "nights": 1,
-    "gross": 71,
-    "costs": 110,
-    "net": -39
-   },
-   {
-    "reservation_id": "demo-2br-04-r51",
-    "property_id": "demo-2br-04",
-    "checkin": "2026-07-05",
-    "nights": 1,
-    "gross": 69,
-    "costs": 107,
-    "net": -38
-   },
-   {
-    "reservation_id": "demo-2br-06-r67",
-    "property_id": "demo-2br-06",
-    "checkin": "2026-06-24",
-    "nights": 1,
-    "gross": 66,
-    "costs": 104,
-    "net": -38
-   },
-   {
-    "reservation_id": "demo-2br-04-r69",
-    "property_id": "demo-2br-04",
-    "checkin": "2026-08-19",
-    "nights": 1,
-    "gross": 73,
-    "costs": 110,
-    "net": -37
+    "costs": 70,
+    "net": -33
    },
    {
     "reservation_id": "demo-1br-03-r48",
@@ -321,44 +132,17 @@
     "checkin": "2026-08-21",
     "nights": 1,
     "gross": 42,
-    "costs": 77,
-    "net": -35
+    "costs": 70,
+    "net": -28
    },
    {
-    "reservation_id": "demo-2br-05-r85",
-    "property_id": "demo-2br-05",
-    "checkin": "2026-08-25",
-    "nights": 1,
-    "gross": 71,
-    "costs": 106,
-    "net": -35
-   },
-   {
-    "reservation_id": "demo-1br-01-r39",
+    "reservation_id": "demo-1br-01-r56",
     "property_id": "demo-1br-01",
-    "checkin": "2026-06-28",
+    "checkin": "2026-09-23",
     "nights": 1,
-    "gross": 45,
-    "costs": 78,
-    "net": -33
-   },
-   {
-    "reservation_id": "demo-2br-05-r74",
-    "property_id": "demo-2br-05",
-    "checkin": "2026-07-26",
-    "nights": 1,
-    "gross": 76,
-    "costs": 109,
-    "net": -33
-   },
-   {
-    "reservation_id": "demo-3br-07-r81",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-08-07",
-    "nights": 1,
-    "gross": 100,
-    "costs": 133,
-    "net": -33
+    "gross": 48,
+    "costs": 70,
+    "net": -22
    },
    {
     "reservation_id": "demo-1br-03-r42",
@@ -366,98 +150,35 @@
     "checkin": "2026-07-17",
     "nights": 1,
     "gross": 52,
-    "costs": 84,
-    "net": -32
+    "costs": 70,
+    "net": -18
    },
    {
-    "reservation_id": "demo-3br-07-r60",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-06-13",
-    "nights": 1,
-    "gross": 95,
-    "costs": 126,
-    "net": -31
-   },
-   {
-    "reservation_id": "demo-2br-06-r72",
-    "property_id": "demo-2br-06",
-    "checkin": "2026-07-08",
-    "nights": 1,
-    "gross": 66,
-    "costs": 96,
-    "net": -30
-   },
-   {
-    "reservation_id": "demo-2br-06-r82",
-    "property_id": "demo-2br-06",
-    "checkin": "2026-08-12",
-    "nights": 1,
-    "gross": 73,
-    "costs": 101,
-    "net": -28
-   },
-   {
-    "reservation_id": "demo-1br-01-r40",
-    "property_id": "demo-1br-01",
-    "checkin": "2026-06-29",
-    "nights": 1,
-    "gross": 49,
-    "costs": 76,
-    "net": -27
-   },
-   {
-    "reservation_id": "demo-2br-05-r58",
+    "reservation_id": "demo-2br-05-r83",
     "property_id": "demo-2br-05",
-    "checkin": "2026-06-09",
+    "checkin": "2026-08-21",
     "nights": 1,
-    "gross": 65,
-    "costs": 92,
-    "net": -27
+    "gross": 52,
+    "costs": 70,
+    "net": -18
    },
    {
-    "reservation_id": "demo-2br-06-r76",
-    "property_id": "demo-2br-06",
-    "checkin": "2026-07-19",
-    "nights": 1,
-    "gross": 74,
-    "costs": 101,
-    "net": -27
-   },
-   {
-    "reservation_id": "demo-3br-08-r70",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-06-04",
-    "nights": 1,
-    "gross": 119,
-    "costs": 145,
-    "net": -26
-   },
-   {
-    "reservation_id": "demo-2br-05-r72",
+    "reservation_id": "demo-2br-05-r79",
     "property_id": "demo-2br-05",
-    "checkin": "2026-07-22",
+    "checkin": "2026-08-08",
     "nights": 1,
-    "gross": 72,
-    "costs": 97,
-    "net": -25
+    "gross": 55,
+    "costs": 70,
+    "net": -15
    },
    {
-    "reservation_id": "demo-3br-07-r55",
-    "property_id": "demo-3br-07",
-    "checkin": "2026-06-03",
+    "reservation_id": "demo-2br-04-r55",
+    "property_id": "demo-2br-04",
+    "checkin": "2026-07-13",
     "nights": 1,
-    "gross": 114,
-    "costs": 139,
-    "net": -25
-   },
-   {
-    "reservation_id": "demo-3br-08-r72",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-06-08",
-    "nights": 1,
-    "gross": 116,
-    "costs": 138,
-    "net": -22
+    "gross": 56,
+    "costs": 70,
+    "net": -14
    },
    {
     "reservation_id": "demo-1br-02-r37",
@@ -465,53 +186,44 @@
     "checkin": "2026-07-05",
     "nights": 1,
     "gross": 59,
-    "costs": 78,
-    "net": -19
-   },
-   {
-    "reservation_id": "demo-3br-08-r96",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-08-06",
-    "nights": 1,
-    "gross": 111,
-    "costs": 130,
-    "net": -19
-   },
-   {
-    "reservation_id": "demo-1br-01-r42",
-    "property_id": "demo-1br-01",
-    "checkin": "2026-07-09",
-    "nights": 1,
-    "gross": 71,
-    "costs": 86,
-    "net": -15
-   },
-   {
-    "reservation_id": "demo-3br-08-r87",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-07-17",
-    "nights": 1,
-    "gross": 128,
-    "costs": 140,
-    "net": -12
-   },
-   {
-    "reservation_id": "demo-3br-08-r100",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-08-17",
-    "nights": 1,
-    "gross": 116,
-    "costs": 127,
+    "costs": 70,
     "net": -11
    },
    {
-    "reservation_id": "demo-3br-08-r105",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-08-30",
+    "reservation_id": "demo-2br-04-r77",
+    "property_id": "demo-2br-04",
+    "checkin": "2026-09-18",
     "nights": 1,
-    "gross": 125,
-    "costs": 135,
-    "net": -10
+    "gross": 62,
+    "costs": 70,
+    "net": -8
+   },
+   {
+    "reservation_id": "demo-2br-06-r90",
+    "property_id": "demo-2br-06",
+    "checkin": "2026-09-05",
+    "nights": 1,
+    "gross": 62,
+    "costs": 70,
+    "net": -8
+   },
+   {
+    "reservation_id": "demo-2br-05-r89",
+    "property_id": "demo-2br-05",
+    "checkin": "2026-09-04",
+    "nights": 1,
+    "gross": 66,
+    "costs": 70,
+    "net": -4
+   },
+   {
+    "reservation_id": "demo-2br-06-r72",
+    "property_id": "demo-2br-06",
+    "checkin": "2026-07-08",
+    "nights": 1,
+    "gross": 66,
+    "costs": 70,
+    "net": -4
    },
    {
     "reservation_id": "demo-1br-01-r47",
@@ -519,53 +231,17 @@
     "checkin": "2026-08-05",
     "nights": 1,
     "gross": 68,
-    "costs": 77,
-    "net": -9
+    "costs": 70,
+    "net": -2
    },
    {
-    "reservation_id": "demo-3br-08-r74",
-    "property_id": "demo-3br-08",
-    "checkin": "2026-06-11",
+    "reservation_id": "demo-2br-04-r51",
+    "property_id": "demo-2br-04",
+    "checkin": "2026-07-05",
     "nights": 1,
-    "gross": 129,
-    "costs": 137,
-    "net": -8
-   },
-   {
-    "reservation_id": "demo-1br-02-r31",
-    "property_id": "demo-1br-02",
-    "checkin": "2026-06-03",
-    "nights": 2,
-    "gross": 80,
-    "costs": 82,
-    "net": -2
-   },
-   {
-    "reservation_id": "demo-1br-02-r42",
-    "property_id": "demo-1br-02",
-    "checkin": "2026-07-29",
-    "nights": 1,
-    "gross": 83,
-    "costs": 85,
-    "net": -2
-   },
-   {
-    "reservation_id": "demo-1br-03-r34",
-    "property_id": "demo-1br-03",
-    "checkin": "2026-06-12",
-    "nights": 2,
-    "gross": 78,
-    "costs": 80,
-    "net": -2
-   },
-   {
-    "reservation_id": "demo-1br-03-r36",
-    "property_id": "demo-1br-03",
-    "checkin": "2026-06-21",
-    "nights": 2,
-    "gross": 74,
-    "costs": 76,
-    "net": -2
+    "gross": 69,
+    "costs": 70,
+    "net": -1
    }
   ]
  }
