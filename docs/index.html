@@ -940,12 +940,26 @@ function initCopilot() {
 }
 async function refreshCopilot() {
   const body = document.getElementById("copilotBody");
-  body.innerHTML = `<div class="empty">Scanning the next 30 days for money-moves…</div>`;
+  const live = API.health && API.health.mode === "live";
+  body.innerHTML =
+    `<div class="empty"><b>Scanning the next 30 days for money-moves…</b>` +
+    (live
+      ? `<br><span style="color:var(--muted)">The first scan pulls a live price recommendation for every listing, one at a time (Wheelhouse’s 60 req/min limit) — up to ~90 seconds. It’s cached for 10 minutes after that, so it’s instant next time.</span>`
+      : ``) +
+    `<span id="copClock" style="display:block;margin-top:8px;color:var(--muted);font-variant-numeric:tabular-nums"></span></div>`;
+  // Näkyvä sekuntikello, ettei skannaus näytä jumittuneelta.
+  const t0 = performance.now();
+  const clock = setInterval(() => {
+    const el = document.getElementById("copClock");
+    if (el) el.textContent = `${Math.round((performance.now() - t0) / 1000)}s…`;
+  }, 1000);
   try {
     const d = await api("api/copilot");
     renderCopilot(d);
   } catch (err) {
     body.innerHTML = `<div class="errline">Couldn’t load the Copilot: ${esc(err.message)}</div>`;
+  } finally {
+    clearInterval(clock);
   }
 }
 function renderCopilot(d) {
