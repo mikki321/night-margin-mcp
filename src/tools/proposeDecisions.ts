@@ -527,7 +527,10 @@ export async function runProposeDecisions(
 
   // Sama tieto myös silloin kun ehdotuksia LÖYTYI: muuten ne näyttävät
   // kattavan koko ikkunan, vaikka horisontin takaosaa ei tarkistettu.
-  if (priceHorizon && priceHorizon < to && proposals.length > 0) {
+  // `to` on eksklusiivinen, joten tarkistamatta jäi jotain vasta kun horisontin
+  // SEURAAVA yö mahtuu vielä ikkunaan — muuten oletusikkuna näyttäisi turhan
+  // huomautuksen nollasta yöstä.
+  if (priceHorizon && nextDay(priceHorizon) < to && proposals.length > 0) {
     parts.push(
       `Checked through ${priceHorizon} only — Wheelhouse price recommendations cover a rolling ~30-night horizon, so the rest of the window (to ${to}) has no price data and was not compared against the floor.`,
     );
