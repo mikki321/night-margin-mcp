@@ -124,6 +124,12 @@
 
   #detail { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; }
 
+  .coverage {
+    margin: 14px 0 2px; padding: 12px 14px; font-size: 12.5px; line-height: 1.5;
+    color: var(--ink-2); background: var(--mid); border-radius: var(--r-md);
+  }
+  .coverage[hidden] { display: none; }
+
   .ranks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 2px; }
   .rankcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
   .rankcard h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 12px 15px 9px; }
@@ -410,6 +416,8 @@
   <div class="tile"><span class="skel" style="width:54px;height:11px"></span><br><span class="skel" style="width:104px;height:30px;margin-top:9px;border-radius:8px"></span><br><span class="skel" style="width:130px;height:11px;margin-top:9px"></span></div>
 </div>
 
+<div id="coverage" class="coverage" hidden></div>
+
 <section id="rankSec">
   <div class="shead"><h2>Leaders &amp; laggards</h2></div>
   <div class="desc">Ranked by net € per available night. Bottom-ranked is not the same as leaking: a property with no bookings in the window sits at €0 without losing money. Leaks are the net-negative bookings below.</div>
@@ -641,6 +649,21 @@ function renderDashboard(d) {
       <div class="note">${eur(t.gross)} − ${eur(t.costs)} turnover costs</div></div>`;
   document.getElementById("kpis").innerHTML = a.leak_eur > 0 ? leakTile + otherTiles : otherTiles + leakTile;
 
+  // Kattavuus: kun iso osa listauksista ei palauta varauksia (livenä 60/73),
+  // "€1/yö · käyttöaste 1.4 %" luetaan rikkinäiseksi työkaluksi ellei kerrota
+  // että nimittäjä on kaikki kohteet mutta liikevaihto vain raportoineista.
+  const covEl = document.getElementById("coverage");
+  const nReporting = a.properties.filter(p => p.booked_nights > 0).length;
+  const nTotal = a.properties.length;
+  if (nTotal > 0 && (nTotal - nReporting) / nTotal > 0.3) {
+    covEl.hidden = false;
+    covEl.textContent =
+      `⚠️ ${nTotal - nReporting} of ${nTotal} listings returned no reservations for this window — check they are connected in Wheelhouse, or that the window matches your season. ` +
+      `Occupancy and net/night divide by all ${nTotal}; the revenue figures come from the ${nReporting} that reported.`;
+  } else {
+    covEl.hidden = true;
+  }
+
   const max = Math.max(...a.properties.map(p => p.net_per_available_night), 1);
   const map = document.getElementById("map");
   map.innerHTML = "";
@@ -709,7 +732,13 @@ function renderDashboard(d) {
       <td class="num">${p.booked_nights}</td><td class="num">${p.gap_nights}</td>
       <td class="num">${eur(p.gross)}</td><td class="num">${eur(p.costs)}</td><td class="num">${eur(p.net)}</td></tr>`).join("");
 
-  const byNet = [...a.properties].sort((x, y) => y.net_per_available_night - x.net_per_available_night);
+  // Vain varauksia saaneet kohteet asetetaan paremmuusjärjestykseen — sama sääntö
+  // kuin analyze_portfoliossa. Livenä 60/73 kohteella ei ollut varauksia, jolloin
+  // "Bottom 5 — worst net/night" listasi viisi €0-kohdetta jotka eivät menetä
+  // rahaa vaan joilla ei ole myyntiä. Lämpökartta näyttää yhä kaikki kohteet.
+  const byNet = a.properties
+    .filter(p => p.booked_nights > 0)
+    .sort((x, y) => y.net_per_available_night - x.net_per_available_night);
   const rankRows = list => list.map((p, i) => {
     const v = p.net_per_available_night;
     return `<div class="rankrow"><span class="rk">${i + 1}</span><span class="nm">${esc(p.property_id)}</span><span class="vl${v < 0 ? " loss" : ""}">${eur1(v)}</span></div>`;
@@ -723,8 +752,9 @@ function renderDashboard(d) {
     rankSec.hidden = true;
   } else {
     rankSec.hidden = false;
-    document.getElementById("bestHead").textContent = `Top ${k} — best net / night`;
-    document.getElementById("worstHead").textContent = `Bottom ${k} — worst net / night`;
+    const ofN = byNet.length < a.properties.length ? ` (of ${byNet.length} with bookings)` : "";
+    document.getElementById("bestHead").textContent = `Top ${k} — best net / night${ofN}`;
+    document.getElementById("worstHead").textContent = `Bottom ${k} — worst net / night${ofN}`;
     document.getElementById("bestList").innerHTML = rankRows(byNet.slice(0, k));
     document.getElementById("worstList").innerHTML = rankRows(byNet.slice(-k).reverse());
   }
