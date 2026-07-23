@@ -29,6 +29,13 @@
     --mid: #f0efec;
     --crit: #d03b3b; --good-text: #006300;
     --neg-1: #f6c9c8; --neg-2: #e34948;
+
+    /* Finish tokens — geometry & motion only (no color; theme-invariant). */
+    --r-sm: 8px; --r-md: 10px; --r-lg: 12px; --r-xl: 14px;
+    --shadow-pop: 0 6px 22px rgba(0,0,0,0.14);
+    --shadow-modal: 0 20px 56px rgba(0,0,0,0.34);
+    --ring: 0 0 0 2px var(--page), 0 0 0 4px var(--ink);
+    --t: 0.14s ease;
   }
   @media (prefers-color-scheme: dark) {
     :root:where(:not([data-theme="light"])) {
@@ -68,51 +75,63 @@
   #themeBtn:hover { color: var(--ink); background: var(--mid); }
   #themeBtn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
-  .hero { margin-top: 14px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; min-height: 56px; }
-  .hero-value { font-size: clamp(44px, 9vw, 56px); font-weight: 650; line-height: 1; letter-spacing: -0.015em; }
-  .hero-unit { font-size: 15px; color: var(--ink-2); font-weight: 500; }
-  .tagline { margin-top: 8px; font-size: 14px; color: var(--ink-2); max-width: 60ch; }
-  .sub { color: var(--muted); margin-top: 6px; font-size: 12.5px; }
+  .hero { margin-top: 16px; display: flex; align-items: baseline; gap: 6px 12px; flex-wrap: wrap; min-height: 56px; }
+  .hero-value { font-size: clamp(44px, 9vw, 58px); font-weight: 650; line-height: 0.95; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .hero-unit { font-size: 15px; color: var(--ink-2); font-weight: 550; }
+  .tagline { margin-top: 10px; font-size: 14px; line-height: 1.5; color: var(--ink-2); max-width: 62ch; text-wrap: pretty; }
+  .sub { color: var(--muted); margin-top: 8px; font-size: 12.5px; }
   .sub .sep { margin: 0 6px; }
 
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin: 20px 0 30px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 14px; margin: 24px 0 4px; }
   .tile {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: 14px 16px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg);
+    padding: 15px 17px 16px;
   }
-  .tile .label { font-size: 12px; color: var(--ink-2); }
-  .tile .value { font-size: 26px; font-weight: 650; margin-top: 2px; }
-  .tile .note { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tile .label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+  .tile .value { font-size: 29px; font-weight: 650; margin-top: 6px; letter-spacing: -0.015em; line-height: 1.05; font-variant-numeric: tabular-nums; }
+  .tile .note { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.4; }
   .tile .leak { color: var(--crit); }
   .tile .ok { color: var(--good-text); }
 
-  .shead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 28px 0 4px; }
-  .shead h2 { font-size: 14px; font-weight: 650; }
-  section .desc { font-size: 12.5px; color: var(--ink-2); margin-bottom: 12px; max-width: 78ch; }
+  .shead { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 34px 0 6px; }
+  .shead h2 { font-size: 14px; font-weight: 650; letter-spacing: -0.005em; }
+  section .desc { font-size: 12.5px; line-height: 1.5; color: var(--ink-2); margin-bottom: 14px; max-width: 78ch; text-wrap: pretty; }
 
   .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); padding: 2px; gap: 2px; }
   .seg[hidden] { display: none; }
   .seg button {
     border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12px;
     padding: 5px 11px; min-height: 28px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+    transition: background var(--t), color var(--t);
   }
+  .seg button:hover { color: var(--ink); }
   .seg button[aria-pressed="true"] { background: var(--mid); color: var(--ink); font-weight: 600; }
   .seg button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
   .map { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 8px; }
   .cell {
-    border-radius: 8px; padding: 10px 11px 9px; min-height: 74px;
+    border-radius: var(--r-md); padding: 11px 12px 10px; min-height: 76px;
     border: 1px solid var(--border); cursor: pointer; position: relative;
     -webkit-tap-highlight-color: transparent;
+    transition: box-shadow var(--t), transform var(--t);
   }
-  @media (hover: hover) { .cell:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.14); } }
-  .cell:focus-visible, .cell.sel { outline: none; box-shadow: 0 0 0 2px var(--page), 0 0 0 4px var(--ink); }
+  @media (hover: hover) { .cell:hover { box-shadow: var(--shadow-pop); transform: translateY(-1px); } }
+  .cell:focus-visible, .cell.sel { outline: none; box-shadow: var(--ring); }
   .cell .name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .cell .net { font-size: 17px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
   .cell .occ { height: 3px; border-radius: 2px; background: color-mix(in oklab, currentColor 22%, transparent); margin-top: 8px; overflow: hidden; }
   .cell .occ i { display: block; height: 100%; background: currentColor; }
 
-  #detail { margin-top: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  #detail { margin-top: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 16px; }
+
+  .ranks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 2px; }
+  .rankcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
+  .rankcard h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 12px 15px 9px; }
+  .rankrow { display: flex; align-items: baseline; gap: 12px; padding: 9px 15px; border-top: 1px solid var(--grid); }
+  .rankrow .rk { font-size: 12px; color: var(--muted); width: 15px; flex: none; font-variant-numeric: tabular-nums; }
+  .rankrow .nm { flex: 1; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .rankrow .vl { font-size: 14px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .rankrow .vl.loss { color: var(--crit); }
   #detail[hidden] { display: none; }
   .dhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
   .dhead b { font-size: 13.5px; }
@@ -130,14 +149,15 @@
   .legend .sw { width: 22px; height: 12px; border-radius: 3px; border: 1px solid var(--border); }
   .legend .end { font-weight: 600; color: var(--ink-2); }
 
-  table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; font-size: 13.5px; }
-  th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--grid); }
-  th { font-size: 12px; color: var(--ink-2); font-weight: 600; }
+  table { border-collapse: collapse; width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; font-size: 13.5px; }
+  th, td { text-align: left; padding: 9px 13px; border-bottom: 1px solid var(--grid); }
+  th { font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 600; white-space: nowrap; }
   tr:last-child td { border-bottom: none; }
   td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
   .chip { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; color: var(--crit); }
   .neg { color: var(--crit); font-weight: 600; }
-  .tablewrap { overflow-x: auto; }
+  .tablewrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border-radius: var(--r-lg); }
+  .tablewrap table { min-width: 560px; }
   #triage tr[data-pid] { cursor: pointer; }
   @media (hover: hover) { #triage tr[data-pid]:hover td { background: var(--mid); } }
 
@@ -155,15 +175,19 @@
   #tip .row, .dets .row { display: flex; justify-content: space-between; gap: 16px; color: var(--ink-2); }
   #tip .row span:last-child { font-variant-numeric: tabular-nums; color: var(--ink); }
 
-  .skel { display: inline-block; background: var(--mid); border-radius: 6px; animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
-  @media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
+  .skel { display: inline-block; position: relative; overflow: hidden; background: var(--mid); border-radius: var(--r-sm); }
+  .skel::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, color-mix(in oklab, var(--ink) 7%, transparent), transparent);
+    transform: translateX(-100%); animation: shimmer 1.5s ease-in-out infinite;
+  }
+  @keyframes shimmer { 100% { transform: translateX(100%); } }
 
   .errcard {
     grid-column: 1 / -1; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 10px; padding: 22px 20px; text-align: center;
+    border-radius: var(--r-lg); padding: 28px 24px; text-align: center;
   }
-  .errcard b { display: block; font-size: 15px; margin-bottom: 4px; }
+  .errcard b { display: block; font-size: 16px; margin-bottom: 6px; }
   .errcard .msg { color: var(--crit); font-size: 13px; }
   .errcard .hint { color: var(--muted); font-size: 12.5px; margin-top: 6px; }
   .errcard code { background: var(--mid); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
@@ -197,16 +221,20 @@
   .tabs button {
     border: 0; background: transparent; color: var(--ink-2); font: inherit; font-size: 12.5px;
     padding: 6px 13px; min-height: 32px; border-radius: 6px; cursor: pointer; white-space: nowrap;
+    transition: background var(--t), color var(--t);
   }
+  .tabs button:hover { color: var(--ink); }
   .tabs button[aria-selected="true"] { background: var(--mid); color: var(--ink); font-weight: 600; }
   .tabs button:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
   .btn {
     border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
-    border-radius: 6px; font: inherit; font-size: 12.5px; font-weight: 600;
-    padding: 6px 12px; min-height: 32px; cursor: pointer;
+    border-radius: var(--r-sm); font: inherit; font-size: 12.5px; font-weight: 600;
+    padding: 7px 13px; min-height: 34px; cursor: pointer; white-space: nowrap;
+    transition: background var(--t), color var(--t), border-color var(--t);
   }
   .btn:hover:not(:disabled) { background: var(--mid); color: var(--ink); }
+  .btn:active:not(:disabled) { background: color-mix(in oklab, var(--ink) 8%, var(--surface)); }
   .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
   .btn:disabled { opacity: .5; cursor: not-allowed; }
   .btn.danger:not(:disabled) { color: var(--crit); border-color: color-mix(in oklab, var(--crit) 45%, transparent); }
@@ -234,22 +262,24 @@
     display: flex; align-items: center; justify-content: center; padding: 16px;
   }
   .modal {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-xl);
     width: min(760px, 100%); max-height: min(84vh, 900px); display: flex; flex-direction: column;
-    box-shadow: 0 12px 40px rgba(0,0,0,.3);
+    box-shadow: var(--shadow-modal); overflow: hidden;
   }
-  .modal .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--grid); }
-  .modal .mhead b { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .modal .mbody { padding: 12px 16px; overflow-y: auto; }
+  .modal .mhead { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 15px 18px; border-bottom: 1px solid var(--grid); }
+  .modal .mhead b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .modal .mbody { padding: 16px 18px; overflow-y: auto; }
   .modal pre {
-    background: var(--page); border: 1px solid var(--grid); border-radius: 8px; padding: 12px;
-    font: 12px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
+    background: var(--page); border: 1px solid var(--grid); border-radius: var(--r-md); padding: 14px;
+    font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap;
     word-break: break-word; color: var(--ink-2); margin: 0;
   }
-  .modal .mfoot { padding: 12px 16px; border-top: 1px solid var(--grid); display: flex; flex-direction: column; gap: 10px; }
-  .confirm-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-  .confirm-row label { display: flex; align-items: flex-start; gap: 8px; font-size: 12.5px; color: var(--ink-2); cursor: pointer; }
-  .confirm-row input[type="checkbox"] { width: 16px; height: 16px; margin-top: 1px; accent-color: var(--crit); flex: none; }
+  .modal .mfoot { padding: 16px 18px; border-top: 1px solid var(--grid); background: var(--page); display: flex; flex-direction: column; gap: 12px; }
+  .mfoot .arm { border: 1px solid var(--border); border-radius: var(--r-md); background: var(--surface); padding: 12px 14px; }
+  .mfoot .arm label { display: flex; align-items: flex-start; gap: 10px; font-size: 12.5px; line-height: 1.5; color: var(--ink); cursor: pointer; }
+  .mfoot .arm input[type="checkbox"] { width: 17px; height: 17px; margin-top: 1px; accent-color: var(--crit); flex: none; cursor: pointer; }
+  .confirm-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .confirm-actions .btn.danger { flex: 1 1 100%; justify-content: center; min-height: 42px; padding: 10px 18px; font-size: 13px; white-space: normal; }
 
   .report {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
@@ -258,17 +288,19 @@
   }
   .report b { color: var(--ink); }
 
-  .props { display: flex; flex-wrap: wrap; gap: 8px; }
+  .props { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; }
   .pchip {
     border: 1px solid var(--border); background: var(--surface); color: var(--ink-2);
-    border-radius: 999px; font: inherit; font-size: 12.5px; padding: 6px 13px; min-height: 32px; cursor: pointer;
+    border-radius: 999px; font: inherit; font-size: 12.5px; padding: 7px 14px; min-height: 34px; cursor: pointer;
+    white-space: nowrap;
+    transition: background var(--t), color var(--t), box-shadow var(--t);
   }
   .pchip:hover { background: var(--mid); color: var(--ink); }
   .pchip[aria-pressed="true"] { background: var(--mid); color: var(--ink); font-weight: 600; box-shadow: inset 0 0 0 1px var(--ink); }
   .pchip:focus-visible { outline: 2px solid var(--ink); outline-offset: 1px; }
 
   .months { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px; margin-top: 14px; }
-  .mcard { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .mcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 14px 15px; }
   .mcard .mlabel { font-size: 12px; font-weight: 600; color: var(--ink-2); }
   .mcard .trow { display: flex; gap: 8px; margin-top: 8px; }
   .mcard input[type="number"] {
@@ -287,8 +319,8 @@
      light theme uses the dark end, dark theme the light end. Identity is
      never color-alone — every series is also dashed differently, legended
      and direct-labeled. */
-  #planPanel { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-  .plan-controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 2px 0 10px; }
+  #planPanel { margin-top: 14px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; }
+  .plan-controls { display: flex; gap: 8px 10px; flex-wrap: wrap; align-items: center; margin: 4px 0 14px; padding-bottom: 14px; border-bottom: 1px solid var(--grid); }
   .plan-stat { font-size: 12.5px; color: var(--ink-2); margin: 4px 0 10px; }
   .plan-stat b { color: var(--ink); font-variant-numeric: tabular-nums; }
   .plan-stat .sep { margin: 0 6px; }
@@ -311,9 +343,10 @@
   .plan-strats { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; margin: 10px 0 2px; font-size: 12.5px; color: var(--ink-2); }
   .plan-strats label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; min-height: 28px; }
   .plan-strats input { accent-color: #256abf; width: 14px; height: 14px; margin: 0; } /* BLUES[4] */
-  .plan-rec { margin: 10px 0 2px; font-size: 13px; color: var(--ink-2); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .plan-rec { margin: 14px 0 2px; padding: 12px 14px; background: var(--mid); border-radius: var(--r-md); font-size: 13px; line-height: 1.5; color: var(--ink-2); display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .plan-rec span { flex: 1 1 260px; }
   .plan-rec b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  .plan-assump { margin: 8px 0 0; padding-left: 18px; font-size: 12px; color: var(--muted); }
+  .plan-assump { margin: 12px 0 0; padding-left: 18px; font-size: 12px; line-height: 1.5; color: var(--muted); }
   .plan-assump li { margin-top: 3px; }
   .plan-hist { margin-top: 12px; }
   .plan-hist > b { font-size: 12px; color: var(--ink-2); }
@@ -346,6 +379,10 @@
   .plan-down .wneg { color: var(--crit); }
   .plan-down .stress-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
   .plan-down code { background: var(--mid); border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
+  }
 </style>
 </head>
 <body>
@@ -362,16 +399,31 @@
     <button type="button" role="tab" data-tab="tgt" aria-selected="false">Targets</button>
     <button type="button" role="tab" data-tab="alerts" aria-selected="false">Alerts</button>
   </nav>
-  <div class="hero" id="hero"><span class="skel" style="width:200px;height:52px;border-radius:10px"></span></div>
+  <div class="hero" id="hero"><span class="skel" style="width:220px;height:56px;border-radius:12px"></span></div>
   <p class="tagline">What your calendar hides: the profit left after every turnover cost.</p>
   <div class="sub" id="meta"><span class="skel" style="width:min(420px,80%);height:13px"></span></div>
 </header>
 
 <div class="kpis" id="kpis">
-  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
-  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
-  <div class="tile"><span class="skel" style="width:60px;height:12px"></span><br><span class="skel" style="width:90px;height:26px;margin-top:6px"></span></div>
+  <div class="tile"><span class="skel" style="width:54px;height:11px"></span><br><span class="skel" style="width:104px;height:30px;margin-top:9px;border-radius:8px"></span><br><span class="skel" style="width:130px;height:11px;margin-top:9px"></span></div>
+  <div class="tile"><span class="skel" style="width:54px;height:11px"></span><br><span class="skel" style="width:104px;height:30px;margin-top:9px;border-radius:8px"></span><br><span class="skel" style="width:130px;height:11px;margin-top:9px"></span></div>
+  <div class="tile"><span class="skel" style="width:54px;height:11px"></span><br><span class="skel" style="width:104px;height:30px;margin-top:9px;border-radius:8px"></span><br><span class="skel" style="width:130px;height:11px;margin-top:9px"></span></div>
 </div>
+
+<section id="rankSec">
+  <div class="shead"><h2>Leaders &amp; laggards</h2></div>
+  <div class="desc">Ranked by net € per available night. Bottom-ranked is not the same as leaking: a property with no bookings in the window sits at €0 without losing money. Leaks are the net-negative bookings below.</div>
+  <div class="ranks">
+    <div class="rankcard"><h3 id="bestHead">Top 5 — best net / night</h3><div id="bestList"></div></div>
+    <div class="rankcard"><h3 id="worstHead">Bottom 5 — worst net / night</h3><div id="worstList"></div></div>
+  </div>
+</section>
+
+<section id="triSec">
+  <h2 style="font-size:14px;font-weight:650;letter-spacing:-0.005em;margin:34px 0 6px">Triage — net-negative bookings</h2>
+  <div class="desc">Bookings whose gross does not cover their own turnover cost. Each one is money lost while the calendar looks “full”. Tap a row to locate the property on the map.</div>
+  <div id="triage"></div>
+</section>
 
 <section id="mapSec">
   <div class="shead">
@@ -384,7 +436,7 @@
   </div>
   <div class="desc">Color = net € per available night — red is a loss, gray near zero, deeper blue is better. Thin bar = occupancy. Tap or hover a tile for details.</div>
   <div class="map" id="map" role="group" aria-labelledby="mapTitle">
-    <div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div>
+    <div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div><div class="cell skel" style="border:0"></div>
   </div>
   <div id="detail" hidden></div>
   <div class="legend" id="legend"></div>
@@ -392,12 +444,6 @@
     <summary>Table view</summary>
     <div class="tablewrap"><table id="ptable"></table></div>
   </details>
-</section>
-
-<section id="triSec">
-  <h2 style="font-size:14px;font-weight:650;margin:28px 0 4px">Triage — net-negative bookings</h2>
-  <div class="desc">Bookings whose gross does not cover their own turnover cost. Each one is money lost while the calendar looks “full”. Tap a row to locate the property on the map.</div>
-  <div id="triage"></div>
 </section>
 
 <section id="decSec" hidden>
@@ -663,6 +709,26 @@ function renderDashboard(d) {
       <td class="num">${p.booked_nights}</td><td class="num">${p.gap_nights}</td>
       <td class="num">${eur(p.gross)}</td><td class="num">${eur(p.costs)}</td><td class="num">${eur(p.net)}</td></tr>`).join("");
 
+  const byNet = [...a.properties].sort((x, y) => y.net_per_available_night - x.net_per_available_night);
+  const rankRows = list => list.map((p, i) => {
+    const v = p.net_per_available_night;
+    return `<div class="rankrow"><span class="rk">${i + 1}</span><span class="nm">${esc(p.property_id)}</span><span class="vl${v < 0 ? " loss" : ""}">${eur1(v)}</span></div>`;
+  }).join("");
+  // Ei päällekkäisyyttä: kummallekin listalle korkeintaan puolet kohteista, muuten
+  // sama kohde näkyisi yhtä aikaa parhaana ja huonoimpana (demodatassa 8 kohdetta).
+  // Alle neljällä kohteella ranking ei kerro mitään → koko osio piiloon.
+  const rankSec = document.getElementById("rankSec");
+  const k = Math.min(5, Math.floor(byNet.length / 2));
+  if (k < 2) {
+    rankSec.hidden = true;
+  } else {
+    rankSec.hidden = false;
+    document.getElementById("bestHead").textContent = `Top ${k} — best net / night`;
+    document.getElementById("worstHead").textContent = `Bottom ${k} — worst net / night`;
+    document.getElementById("bestList").innerHTML = rankRows(byNet.slice(0, k));
+    document.getElementById("worstList").innerHTML = rankRows(byNet.slice(-k).reverse());
+  }
+
   const tri = document.getElementById("triage");
   if (a.negative_reservations.length === 0) {
     tri.innerHTML = `<div class="empty">No net-negative bookings in this window — nothing leaking.</div>`;
@@ -798,10 +864,10 @@ function openInfoModal(title, text) {
 function twoStepConfirm({ verb, warnLabel, enabled, disabledReason, onConfirm }) {
   modalFoot.hidden = false;
   modalFoot.innerHTML = `
-    <div class="confirm-row">
+    <div class="arm">
       <label><input type="checkbox" id="armBox"${enabled ? "" : " disabled"}><span>${esc(warnLabel)}</span></label>
     </div>
-    <div class="confirm-row">
+    <div class="confirm-actions">
       <button class="btn danger" id="confirmBtn" type="button" disabled>${esc(verb)}</button>
       ${enabled ? "" : `<span class="hint">${esc(disabledReason)}</span>`}
     </div>`;

@@ -169,6 +169,13 @@ export async function runCompareStrategies(args: CompareArgs): Promise<string> {
   const reservationSource = reservationSourceFromEnv(process.env);
 
   const reservations = await reservationSource.getReservations(from, to);
+  // Sama nimittäjä kuin analyze_portfoliossa: kun lähde tuntee kohdelistan,
+  // nollavarauskohteet lasketaan mukaan käyttöasteeseen ja net/night-jakajaan.
+  // Ilman tätä sama ikkuna antoi eri luvut kahdesta toolista (analyze €14/yö
+  // ja 3.0 % vs compare €42.5/yö ja 9.2 % — nimittäjässä 73 vs 24 kohdetta).
+  const allPropertyIds = reservationSource.listPropertyIds
+    ? await reservationSource.listPropertyIds()
+    : undefined;
   // Sama kohdistuskaskadi kuin analyze_portfoliossa (id → koodi → komposiitti
   // → keskiarvo) — samat luvut samalla jaksolla molemmissa tooleissa.
   const { costs, matchNote } = await resolveCosts(
@@ -179,14 +186,14 @@ export async function runCompareStrategies(args: CompareArgs): Promise<string> {
     avgFallbackFromEnv(process.env),
   );
 
-  const baseline = analyzePortfolio(reservations, costs, from, to);
+  const baseline = analyzePortfolio(reservations, costs, from, to, allPropertyIds);
   const simA = simulateFillGaps(reservations, costs, from, to, { discountPct });
   const simB = simulateMinStayUplift(reservations, costs, from, to, {
     minStay,
     upliftPct,
   });
-  const analysisA = analyzePortfolio(simA.reservations, simA.costs, from, to);
-  const analysisB = analyzePortfolio(simB.reservations, simB.costs, from, to);
+  const analysisA = analyzePortfolio(simA.reservations, simA.costs, from, to, allPropertyIds);
+  const analysisB = analyzePortfolio(simB.reservations, simB.costs, from, to, allPropertyIds);
 
   const scenarios: [Scenario, Scenario, Scenario] = [
     {
