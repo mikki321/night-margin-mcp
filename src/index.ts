@@ -9,6 +9,7 @@ import { compareStrategiesInputSchema, runCompareStrategies } from "./tools/comp
 import { runGapNightCheck } from "./tools/gapNightCheck.js";
 import { proposeDecisionsInputSchema, runProposeDecisions } from "./tools/proposeDecisions.js";
 import { revertDecisionInputSchema, runRevertDecision } from "./tools/revertDecision.js";
+import { marginCopilotInputSchema, runMarginCopilot } from "./tools/marginCopilot.js";
 import { reviewHistoryInputSchema, runReviewHistory } from "./tools/reviewHistory.js";
 import { runSetTarget, setTargetInputSchema } from "./tools/setTarget.js";
 
@@ -265,6 +266,29 @@ async function main(): Promise<void> {
     async (args) => {
       try {
         const text = await runReviewHistory(args);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "margin_copilot",
+    {
+      title: "Rank where money moves and weigh the options (read-only)",
+      description:
+        "Margin Copilot: reads the same figures as propose_decisions, groups the gap nights priced below your cost floor into per-property money-moves, ranks them by below-floor exposure (biggest first), and weighs the options for each — Hold, Guard the floor (recommended), and where it applies, raise the minimum stay — with one marked recommended. " +
+        "The only euro figures are computed (below-floor exposure, floor levels); it does NOT invent a '30-day net' or option deltas that would require guessing fill probability, and it never claims an unsold night as a gain. " +
+        "Read-only — it never writes prices or state. Staging a recommended move routes to propose_decisions → apply_decision, where every write is previewed and needs an explicit confirm. Requires WHEELHOUSE_API_KEY (uses live price recommendations).",
+      inputSchema: marginCopilotInputSchema,
+    },
+    async (args) => {
+      try {
+        const text = await runMarginCopilot(args);
         return { content: [{ type: "text" as const, text }] };
       } catch (e) {
         return {

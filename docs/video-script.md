@@ -14,7 +14,7 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 ## (0:20 – 0:45) Install — under 60 seconds
 
-**[SCREEN: Terminal. Type and run `claude mcp add margin -- npx -y night-margin-mcp`. A visible clock/stopwatch in frame. Cut (or speed up) to Claude with the nine margin tools listed. This beat can be a pre-recorded clip.]**
+**[SCREEN: Terminal. Type and run `claude mcp add margin -- npx -y night-margin-mcp`. A visible clock/stopwatch in frame. Cut (or speed up) to Claude with the ten margin tools listed. This beat can be a pre-recorded clip.]**
 
 > Install is one command: claude mcp add margin. No config — it ships with a synthetic demo portfolio, so anyone can try it and get a first answer in under a minute. Add your Wheelhouse API key, and the same tools run on your real bookings, live from the Wheelhouse RM API. Here it is on my portfolio.
 
