@@ -124,7 +124,8 @@ describe("check_alerts — floor-hälytys", () => {
     const e = { ...env, AVG_TURNOVER_COST: "200" } as NodeJS.ProcessEnv;
     const out = await runCheckAlerts({ send: false }, e, { now: NOW });
 
-    expect(out).toContain("priced below your cost floor — run propose_decisions to review.");
+    expect(out).toContain("priced below your cost floor — ");
+    expect(out).toMatch(/€[\d,]+ of below-floor exposure\. Run propose_decisions to review\./);
     expect(out).toMatch(/⚠️ \d+ gap nights? on \d+ propert(y|ies)/);
   });
 
@@ -146,7 +147,8 @@ describe("check_alerts — floor-hälytys", () => {
     await runCheckAlerts({ send: false }, e, { now: NOW });
     const out = await runCheckAlerts({ send: false }, e, { now: NOW });
 
-    expect(out).toContain("priced below your cost floor — run propose_decisions to review.");
+    expect(out).toContain("priced below your cost floor — ");
+    expect(out).toMatch(/€[\d,]+ of below-floor exposure\. Run propose_decisions to review\./);
     expect(out).toContain("No new bookings since the last check.");
     expect(out).not.toContain("Baseline recorded");
   });

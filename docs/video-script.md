@@ -26,7 +26,7 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 ## (1:15 – 1:45) compare_strategies — gross up, net down
 
-**[SCREEN: Claude. Prompt: "Compare two strategies for June 2026: (A) fill gap nights at a 40% discount and (B) raise the minimum stay to three nights with a 10% price increase." Show the scenario table; highlight row A (Gross €26,797 / Net €17,487 / Occupancy 99.2%) against Baseline (€22,821 / €17,921 / 72.9%). End zoomed on the summary line: "A brings €3,977 more gross but €433 less net — gross-optimizing fill is a net loss."]**
+**[SCREEN: Claude. Prompt: "Compare two strategies for June 2026: (A) fill gap nights at a 40% discount and (B) raise the minimum stay to three nights with a 10% price increase." Show the scenario table; highlight row A (Gross €111,699 / Net €71,799 / Occupancy 99.8%) against Baseline (€93,691 / €73,601 / 70.3%). End zoomed on the summary line: "A brings €18,009 more gross but €1,801 less net — gross-optimizing fill is a net loss."]**
 
 > Now the trap every gross-optimizer walks into. Compare two strategies for June: A — fill every gap night at forty percent off. B — minimum stay three nights, prices up ten percent. A looks great: occupancy jumps to ninety-nine percent, gross up almost four thousand euros. But net is down four hundred and thirty-three. Gross up, net down. Because a two-night and a seven-night booking consume exactly the same cleaning.
 

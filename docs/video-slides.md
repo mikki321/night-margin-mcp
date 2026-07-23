@@ -41,17 +41,17 @@ Architecture (the one picture):
 
 ## Slide 3 — The money slide
 
-**Gross up €3,977. Net down €433.**
+**Gross up €18,009. Net down €1,801.**
 
-June 2026, demo portfolio — same bookings, three strategies:
+Demo portfolio, default window — same bookings, three strategies:
 
 | Strategy | Gross | Net | Net/night | Occupancy |
 |---|---:|---:|---:|---:|
-| Baseline | €22,821 | €17,921 | €74.7 | 72.9% |
-| A: fill gap nights at 40% off | **€26,797** | **€17,487** | €72.9 | 99.2% |
-| B: min stay 3 nights, prices +10% | €17,513 | €15,693 | €65.4 | 45.0% |
+| Baseline | €93,691 | €73,601 | €76.7 | 70.3% |
+| A: fill gap nights at 40% off | **€111,699** | **€71,799** | €74.8 | 99.8% |
+| B: min stay 3 nights, prices +10% | €73,040 | €65,760 | €68.5 | 44.5% |
 
-- Strategy A: occupancy 99%, a revenue record — and **less profit than doing nothing**.
+- Strategy A: occupancy 99.8%, a revenue record — and **less profit than doing nothing**.
 - The tool says it in one line: *"gross-optimizing fill is a net loss."*
 
 ---

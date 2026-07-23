@@ -129,22 +129,48 @@ describe("formatAnalysis — kipu ensin", () => {
     expect(text).toContain("leak totaled €0.3");
   });
 
-  it("nollavarauskohteet: 'had no bookings' -rivi + kohteet bottom-listassa €0-nettona (löydös 7)", () => {
+  it("nollavarauskohteet pysyvät nimittäjässä mutta EIVÄT ranking-listoilla eivätkä yhteenvedossa", () => {
     const reservations = [res("r1", "p1", "2026-07-01", "2026-07-05", 4, 400)];
     const costs = costMap(cost("r1", 70, 20, 10));
     const a = analyzePortfolio(reservations, costs, FROM, TO, ["p1", "p2-empty", "p3-empty"]);
     expect(a.no_booking_properties).toBe(2);
 
     const text = formatAnalysis(a, "manual (test)", "");
-    expect(text).toContain("2 properties had no bookings in this window");
-    // nollakohde näkyy taulukossa rehellisesti €0-nettona
-    expect(text).toContain("| p2-empty | €0 | 0 | 10 | €0 |");
+    // Nimittäjä on yhä kaikki 3 kohdetta (4 varattua / 30 = 13.3 %)
+    expect(text).toContain("Occupancy 13.3%");
+    // REGRESSIO: varaukseton kohde ei saa esiintyä ranking-taulukossa eikä
+    // yhteenvedossa — live-ajossa Bottom 10 oli 10 riviä €0/0 booked 60 kohteen
+    // tasapelistä ja yhteenveto nimesi niistä yhden "parannuskohteeksi".
+    expect(text).not.toContain("p2-empty");
+    expect(text).not.toContain("p3-empty");
+    expect(text).toContain("the biggest improvement potential is in p1");
+  });
 
-    // yksikkömuoto
-    const single = analyzePortfolio(reservations, costs, FROM, TO, ["p1", "p2-empty"]);
-    expect(formatAnalysis(single, "manual (test)", "")).toContain(
-      "1 property had no bookings in this window",
+  it("iso kattamaton osuus (>30 %) nostaa kattavuusvaroituksen, pieni ei", () => {
+    const reservations = [res("r1", "p1", "2026-07-01", "2026-07-05", 4, 400)];
+    const costs = costMap(cost("r1", 70, 20, 10));
+
+    // 2/3 ilman varauksia → varoitus, joka kertoo mistä luvut tulevat
+    const many = analyzePortfolio(reservations, costs, FROM, TO, ["p1", "p2-empty", "p3-empty"]);
+    const manyText = formatAnalysis(many, "manual (test)", "");
+    expect(manyText).toContain("⚠️ 2 of 3 listings returned no reservations for this window");
+    expect(manyText).toContain("the revenue figures come from the 1 that reported");
+
+    // 1/4 ilman varauksia (25 %) → pelkkä laskurivi, ei varoitusta
+    const few = analyzePortfolio(
+      [
+        res("r1", "p1", "2026-07-01", "2026-07-05", 4, 400),
+        res("r2", "p2", "2026-07-01", "2026-07-05", 4, 400),
+        res("r3", "p3", "2026-07-01", "2026-07-05", 4, 400),
+      ],
+      costMap(cost("r1", 70, 20, 10), cost("r2", 70, 20, 10), cost("r3", 70, 20, 10)),
+      FROM,
+      TO,
+      ["p1", "p2", "p3", "p4-empty"],
     );
+    const fewText = formatAnalysis(few, "manual (test)", "");
+    expect(fewText).toContain("1 property had no bookings in this window");
+    expect(fewText).not.toContain("⚠️");
   });
 
   it("ilman kohdelistaa (tai kun kaikilla on varauksia) riviä ei näytetä", () => {

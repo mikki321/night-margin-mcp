@@ -20,7 +20,7 @@ Wheelhouse tells you the right price for every night — but no revenue tool kno
 
 night-margin-mcp is the margin guard for that gap: an MCP server that shows every pricing decision net of turnover costs. It pulls live listings and reservations from the Wheelhouse RM API, attaches per-booking turnover costs (flat average, CSV, or an ops-platform API), and computes one honest metric: net per available night. Three tools: `analyze_portfolio` finds where money leaks, `compare_strategies` puts gross and net in the same picture, `gap_night_check` gives a fill-or-skip verdict with a floor price.
 
-The demo scenario says it all: filling gap nights at 40% off lifts occupancy to 99% and adds €3,977 gross — while net *drops* €433.
+The demo scenario says it all: filling gap nights at 40% off lifts occupancy from 70% to 99.8% and adds €18,009 gross — while net *drops* €1,801.
 
 Install in under a minute: `claude mcp add margin -- npx -y night-margin-mcp`
 
@@ -40,7 +40,7 @@ I run Lapland Host, a property management company with 73 short-term rental list
 
 ## How it maps to the judging criteria
 
-**Business Value.** It catches decisions that are revenue-positive but profit-negative, today: in the demo scenario, gap-filling at a 40% discount adds €3,977 gross and loses €433 net. This is the analysis my own team runs before touching discounts or min-stay rules — and any operator can reproduce it with their own Wheelhouse key or cost CSV.
+**Business Value.** It catches decisions that are revenue-positive but profit-negative, today: in the demo scenario, gap-filling at a 40% discount adds €18,009 gross and loses €1,801 net. This is the analysis my own team runs before touching discounts or min-stay rules — and any operator can reproduce it with their own Wheelhouse key or cost CSV.
 
 **Completeness.** Not a mockup: published on npm, one-command install, first result in under 60 seconds with zero config (clearly-labeled synthetic data), fully functional with a real Wheelhouse key. Three working tools, a 150+ test suite, actionable error messages, and a public demo page rendered from real server output.
 

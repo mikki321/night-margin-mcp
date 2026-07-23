@@ -80,12 +80,22 @@ export function formatTargetsSection(
   reservations: Reservation[],
   from: string,
   to: string,
+  /**
+   * Nykyisen datalähteen tuntemat kohteet. Tavoitteet elävät yhdessä
+   * ~/.night-margin/targets.json-tiedostossa riippumatta siitä ajetaanko
+   * demo- vai live-tilassa, joten ilman tätä suodatinta oikean portfolion
+   * kohde (oikea katuosoite) tulostui synteettisen demodatan tulokseen.
+   * Tuntematon lista = ei suodatusta (vanha käytös).
+   */
+  knownPropertyIds?: Iterable<string>,
 ): string | undefined {
+  const known = knownPropertyIds ? new Set(knownPropertyIds) : undefined;
   const lines: string[] = [];
   const sorted = [...targets].sort((a, b) =>
     a.month === b.month ? a.property_id.localeCompare(b.property_id) : a.month.localeCompare(b.month),
   );
   for (const t of sorted) {
+    if (known && !known.has(t.property_id)) continue; // toisen tilan kohde
     let mw: { from: string; to: string };
     try {
       mw = monthWindow(t.month);

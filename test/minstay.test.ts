@@ -301,9 +301,13 @@ describe("propose_decisions — min stay fake-clientillä (live-tila)", () => {
     const { client } = fakeWheelhouseWithMinStay();
     const out = await runProposeDecisions({}, env, { now: NOW, client });
 
-    expect(out).toContain("Raise to floor €95/night — protects 3 nights");
+    expect(out).toContain("Raise to floor €95/night — ");
+    expect(out).toContain("of below-floor exposure across 3 nights");
     expect(out).not.toContain("amortized");
     expect(out).not.toContain("min-stay lookup failed");
+    // min_stay 1 + ≥3 yötä → minimioleskeluvipu näytetään (lattia/3)
+    expect(out).toContain("Or set a 3-night minimum stay for these dates");
+    expect(out).toContain("the floor drops to €32/night");
     const d = readDecisions(env)[0];
     expect(d).toMatchObject({ floor_price: 95, dates: ["2026-06-28", "2026-06-29", "2026-06-30"] });
   });
@@ -330,7 +334,9 @@ describe("propose_decisions — min stay fake-clientillä (live-tila)", () => {
     expect(out).toContain(
       "Raise to floor €48/night (turnover amortized over the 2-night minimum stay)",
     );
-    expect(out).toContain("Raise to floor €95/night — protects 2 nights");
+    expect(out).toContain("of below-floor exposure across 2 nights");
+    // 2 yötä (< 3) → vipulausetta ei näytetä
+    expect(out).not.toContain("Or set a 3-night minimum stay");
 
     const decisions = readDecisions(env);
     expect(decisions).toHaveLength(2);
@@ -358,7 +364,8 @@ describe("propose_decisions — min stay fake-clientillä (live-tila)", () => {
     const out = await runProposeDecisions({}, env, { now: NOW, client });
 
     // Propose EI kaadu; lattiat kuin ilman min stay -dataa
-    expect(out).toContain("Raise to floor €95/night — protects 3 nights");
+    expect(out).toContain("Raise to floor €95/night — ");
+    expect(out).toContain("of below-floor exposure across 3 nights");
     expect(out).toContain(
       'min-stay lookup failed for "Test Cabin"',
     );

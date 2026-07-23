@@ -114,9 +114,15 @@ export async function runCheckAlerts(
     const nightCount = floorResult.proposals.reduce((acc, p) => acc + p.dates.length, 0);
     const propertyCount = new Set(floorResult.proposals.map((p) => p.property_id)).size;
     if (nightCount > 0) {
+      // Sama euromäärä kuin propose_decisionsin yhteissummassa: pelkkä yömäärä
+      // ei kerro onko kyse muutamasta eurosta vai tuhansista.
+      const exposure = Math.round(
+        floorResult.proposals.reduce((acc, p) => acc + p.floor_vs_rec_delta, 0),
+      );
       floorLine =
         `⚠️ ${nightCount} gap night${nightCount === 1 ? "" : "s"} on ${propertyCount} propert${propertyCount === 1 ? "y" : "ies"} ` +
-        `${nightCount === 1 && propertyCount === 1 ? "is" : "are"} priced below your cost floor — run propose_decisions to review.`;
+        `${nightCount === 1 && propertyCount === 1 ? "is" : "are"} priced below your cost floor — ` +
+        `${eur(exposure)} of below-floor exposure. Run propose_decisions to review.`;
     }
   }
 

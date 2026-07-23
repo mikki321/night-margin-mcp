@@ -63,9 +63,15 @@ export function formatAnalysis(
   targetsSection?: string,
   monthEndNote?: string,
 ): string {
-  const bottom = a.properties.slice(0, 10);
-  const top = [...a.properties].slice(-5).reverse();
-  const worst = a.properties[0];
+  // Vain varauksia saaneet kohteet asetetaan paremmuusjärjestykseen. Ilman tätä
+  // live-portfolion Bottom 10 oli kymmenen riviä "€0 | 0 booked | €0" 60 kohteen
+  // tasapelistä, ja yhteenveto nimesi niistä yhden "suurimmaksi parannuskohteeksi"
+  // — se ei ole diagnoosi vaan se listaus jonka API sattui palauttamaan ensin.
+  // Nollavarauskohteet pysyvät nimittäjässä; ne raportoidaan omalla rivillään.
+  const ranked = a.properties.filter((p) => p.booked_nights > 0);
+  const bottom = ranked.slice(0, 10);
+  const top = [...ranked].slice(-5).reverse();
+  const worst = ranked[0];
 
   const parts: string[] = [];
   const windowLine = `## Portfolio ${a.from} → ${a.to}${isDefaultWindow ? DEFAULT_WINDOW_NOTE : ""}`;
@@ -77,11 +83,19 @@ export function formatAnalysis(
   const nNeg = a.negative_reservations.length;
   const occLine = `Occupancy ${pct(a.totals.occupancy_pct)} (${a.totals.booked_nights} booked, ${a.totals.gap_nights} gap nights)`;
   // Löydös 7: nollavarauskohteet ovat mukana nimittäjässä — sanotaan se ääneen.
+  // Kun niitä on paljon (live-ajossa 60/73), pelkkä lukumäärä ei riitä: käyttäjä
+  // lukee "€1/yö · käyttöaste 1.4 %" rikkinäiseksi työkaluksi, ellei tulosteessa
+  // kerrota että liikevaihtoluvut tulevat vain raportoineista kohteista.
+  const nTotal = a.properties.length;
+  const nNoBooking = a.no_booking_properties ?? 0;
+  const nReporting = nTotal - nNoBooking;
   const noBookingLines =
-    a.no_booking_properties !== undefined && a.no_booking_properties > 0
-      ? [
-          `${a.no_booking_properties} ${a.no_booking_properties === 1 ? "property" : "properties"} had no bookings in this window`,
-        ]
+    a.no_booking_properties !== undefined && nNoBooking > 0
+      ? nTotal > 0 && nNoBooking / nTotal > 0.3
+        ? [
+            `⚠️ ${nNoBooking} of ${nTotal} listings returned no reservations for this window — check they are connected in Wheelhouse, or that the window matches your season. Occupancy and net/night below divide by all ${nTotal}; the revenue figures come from the ${nReporting} that reported.`,
+          ]
+        : [`${nNoBooking} ${nNoBooking === 1 ? "property" : "properties"} had no bookings in this window`]
       : [];
   const grossLine = `Gross ${eur(a.totals.gross)} − turnover costs ${eur(a.totals.costs)} = net ${eur(a.totals.net)}`;
   const statLines =
@@ -101,8 +115,20 @@ export function formatAnalysis(
         ];
   parts.push(statLines.join("\n"));
 
-  parts.push(`### Bottom ${bottom.length} (net/night)\n${propertyTable(bottom)}`);
-  parts.push(`### Top ${top.length} (net/night)\n${propertyTable(top)}`);
+  // Alle 11 varatulla kohteella Bottom ja Top toistaisivat samat rivit kahdesti
+  // (3 kohteen käyttäjällä sama kohde molemmissa) — silloin yksi taulukko.
+  if (ranked.length === 0) {
+    parts.push(
+      `No property had a booking in this window, so there is nothing to rank. The figures above cover ${a.properties.length} ${a.properties.length === 1 ? "property" : "properties"}.`,
+    );
+  } else if (ranked.length <= 10) {
+    parts.push(
+      `### All ${ranked.length} propert${ranked.length === 1 ? "y" : "ies"} with bookings (net/night)\n${propertyTable([...ranked].reverse())}`,
+    );
+  } else {
+    parts.push(`### Bottom ${bottom.length} (net/night)\n${propertyTable(bottom)}`);
+    parts.push(`### Top ${top.length} (net/night)\n${propertyTable(top)}`);
+  }
 
   // Kuukausitavoitteet (set_target) — vain kun tavoite osuu ikkunaan.
   if (targetsSection) parts.push(targetsSection);
@@ -163,9 +189,18 @@ export async function runAnalyzePortfolio(args: AnalyzeArgs): Promise<string> {
     `reservations: ${reservationSource.label}` + (matchNote ? `\n${matchNote}` : "");
 
   // Tavoitteet (set_target): lukukelvoton state ei saa kaataa analyysiä.
+  // Suodatetaan nykyisen lähteen tuntemiin kohteisiin — tavoitetiedosto on
+  // jaettu demo- ja live-tilan kesken, ja ilman tätä oikea katuosoite tulostui
+  // synteettisen demodatan analyysiin (näkyisi videolla ja julkisessa demossa).
   let targetsSection: string | undefined;
   try {
-    targetsSection = formatTargetsSection(readTargets(process.env), reservations, from, to);
+    targetsSection = formatTargetsSection(
+      readTargets(process.env),
+      reservations,
+      from,
+      to,
+      analysis.properties.map((p) => p.property_id),
+    );
   } catch {
     targetsSection = undefined;
   }

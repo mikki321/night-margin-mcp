@@ -96,6 +96,12 @@ export interface ProposeDeps {
   now?: Date;
 }
 
+/** Seuraava päivä ISO-muodossa — `to` on eksklusiivinen, joten horisontin
+ *  viimeinen yö vaatii +1 päivän kelvatakseen `to`-arvoksi. */
+function nextDay(isoDate: string): string {
+  return iso(Date.parse(`${isoDate}T00:00:00Z`) + MS_PER_DAY);
+}
+
 function formatDates(dates: string[]): string {
   return dates.length === 1
     ? dates[0]
@@ -147,6 +153,8 @@ export interface GapFloorGatherResult {
   overlappingAppliedIds: string[];
   proposals: GapFloorProposal[];
   listingByProperty: Map<string, WhListing>;
+  /** Viimeisin yö jolle Wheelhouse antoi hintasuosituksen (rullaava ~30 vrk). */
+  priceHorizon?: string;
 }
 
 /**
@@ -344,6 +352,19 @@ export async function gatherGapFloorProposals(
     pricedGapNights += gapDates.filter((d) => priced.has(d) && !excluded?.has(d)).length;
   }
 
+  // Wheelhousen hintasuositukset kattavat rullaavan ~30 yön horisontin (verifioitu
+  // livenä 23.7.: stay_date 2026-07-23 → 2026-08-21, tasan 30 riviä per listing).
+  // Sen takana olevia öitä EI voi verrata lattiaan lainkaan — käyttäjän on
+  // nähtävä horisontti, muutta "ei ehdotuksia" luetaan väärin "kaikki kunnossa".
+  let priceHorizon: string | undefined;
+  for (const recs of priceRecsByProperty.values()) {
+    for (const r of recs) {
+      if (r.stay_date && (priceHorizon === undefined || r.stay_date > priceHorizon)) {
+        priceHorizon = r.stay_date;
+      }
+    }
+  }
+
   if (excludedGapNights > 0) {
     priceNotes.push(
       `${excludedGapNights} gap night${excludedGapNights === 1 ? " is" : "s are"} already covered by applied decision${overlappingAppliedIds.length === 1 ? "" : "s"} ${formatIdRanges(overlappingAppliedIds)} — excluded from proposals (revert first to re-propose)`,
@@ -377,6 +398,7 @@ export async function gatherGapFloorProposals(
     overlappingAppliedIds,
     proposals,
     listingByProperty,
+    priceHorizon,
   };
 }
 
@@ -426,6 +448,7 @@ export async function runProposeDecisions(
     excludedGapNights,
     overlappingAppliedIds,
     listingByProperty,
+    priceHorizon,
   } = result;
 
   // Talleta LUKON ALLA (rinnakkainen sessio voisi muuten hävittää välissä
@@ -495,6 +518,21 @@ export async function runProposeDecisions(
     );
   }
 
+  // Wheelhouse antaa hintasuosituksia vain rullaavalle ~30 yön horisontille.
+  // Ilman tätä lausetta "no proposals" luetaan "kaikki hinnat ovat kunnossa",
+  // vaikka tosiasiassa suurinta osaa ikkunasta ei voitu tarkistaa lainkaan.
+  const horizonNote = priceHorizon
+    ? ` Wheelhouse price recommendations reach through ${priceHorizon} (a rolling ~30-night horizon) — gap nights after that date have no price to compare and were not checked. Re-run with to=${nextDay(priceHorizon)} to see everything that is checkable today.`
+    : "";
+
+  // Sama tieto myös silloin kun ehdotuksia LÖYTYI: muuten ne näyttävät
+  // kattavan koko ikkunan, vaikka horisontin takaosaa ei tarkistettu.
+  if (priceHorizon && priceHorizon < to && proposals.length > 0) {
+    parts.push(
+      `Checked through ${priceHorizon} only — Wheelhouse price recommendations cover a rolling ~30-night horizon, so the rest of the window (to ${to}) has no price data and was not compared against the floor.`,
+    );
+  }
+
   if (proposals.length === 0) {
     let message: string;
     if (totalGapNights === 0 && excludedGapNights > 0) {
@@ -505,11 +543,14 @@ export async function runProposeDecisions(
     } else if (totalGapNights === 0) {
       message = "No gap nights in the window — nothing to propose.";
     } else if (pricedGapNights === 0) {
-      message = `No proposals — none of the ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window have price data to compare against the cost floor.`;
+      message =
+        `No proposals — none of the ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window have price data to compare against the cost floor.` +
+        horizonNote;
     } else if (pricedGapNights < totalGapNights) {
       message =
         `No proposals — all ${pricedGapNights} priced gap night${pricedGapNights === 1 ? "" : "s"} (of ${totalGapNights}) are at or above the cost floor ` +
-        `(turnover + travel + minimum margin); the remaining ${totalGapNights - pricedGapNights} ha${totalGapNights - pricedGapNights === 1 ? "s" : "ve"} no price data and ${totalGapNights - pricedGapNights === 1 ? "was" : "were"} not compared.`;
+        `(turnover + travel + minimum margin); the remaining ${totalGapNights - pricedGapNights} ha${totalGapNights - pricedGapNights === 1 ? "s" : "ve"} no price data and ${totalGapNights - pricedGapNights === 1 ? "was" : "were"} not compared.` +
+        horizonNote;
     } else {
       message = `No proposals — prices for all ${totalGapNights} gap night${totalGapNights === 1 ? "" : "s"} in the window are at or above the cost floor (turnover + travel + minimum margin). That's good: nothing is priced below cost.`;
     }
@@ -525,13 +566,28 @@ export async function runProposeDecisions(
     // täsmälleen ennallaan (mock-demo ja min_stay=null-portfoliot eivät muutu).
     const amortNote =
       p.min_stay >= 2 ? ` (turnover amortized over the ${p.min_stay}-night minimum stay)` : "";
+    // Min stay = 1 → lattia on koko vaihtokustannus yhdelle yölle. Se on oikein
+    // (yö on yhä myytävissä yhden yön varauksena), mutta lukija ei näe oletusta
+    // — ja minimioleskelu on halvin tapa pudottaa lattiaa. Sanotaan molemmat.
+    const minStayLever =
+      p.min_stay < 2 && p.dates.length >= 3
+        ? ` Or set a ${Math.min(3, p.dates.length)}-night minimum stay for these dates: the same turnover then spreads over ${Math.min(3, p.dates.length)} nights and the floor drops to ${eur(Math.ceil(d.floor_price / Math.min(3, p.dates.length)))}/night.`
+        : "";
     lines.push(
       `${i + 1}. **${d.id} · ${d.property_id}** · ${formatDates(d.dates)} (${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"})\n` +
-        `   Raise to floor ${eur(d.floor_price)}/night${amortNote} — protects ${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"} from selling below cost (floor ${eur(d.floor_price)} vs current recommendation ${formatRecRange(p)}).`,
+        `   Raise to floor ${eur(d.floor_price)}/night${amortNote} — ${eur(Math.round(p.floor_vs_rec_delta))} of below-floor exposure across ${p.protected_nights} night${p.protected_nights === 1 ? "" : "s"} (floor ${eur(d.floor_price)} vs current recommendation ${formatRecRange(p)}).${minStayLever}`,
     );
   });
+  // Kokonaissumma: ilman tätä lista on "20 ehdotusta" ilman yhtään euroa, eikä
+  // lukija näe kummalla päällä lista on tärkeysjärjestyksessä (se on jo lajiteltu
+  // tällä samalla luvulla, src/core/decisions.ts:232).
+  const totalExposure = Math.round(proposals.reduce((acc, p) => acc + p.floor_vs_rec_delta, 0));
+  const totalNights = proposals.reduce((acc, p) => acc + p.protected_nights, 0);
+  const totalProperties = new Set(proposals.map((p) => p.property_id)).size;
   parts.push(
-    `Found ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} — gap nights where the current price is below your cost floor:\n\n${lines.join("\n")}`,
+    `Found ${proposals.length} proposal${proposals.length === 1 ? "" : "s"} — gap nights where the current price is below your cost floor.\n` +
+      `**Total below-floor exposure: ${eur(totalExposure)} across ${totalNights} night${totalNights === 1 ? "" : "s"} on ${totalProperties} propert${totalProperties === 1 ? "y" : "ies"}.** ` +
+      `That is the gap between the price on offer and what those nights cost to produce — not a forecast of lost revenue, since an unsold night earns nothing either way.\n\n${lines.join("\n")}`,
   );
   parts.push(
     [
