@@ -14,9 +14,11 @@ claude mcp add margin -- npx -y night-margin-mcp
 
 That's it — **works with zero config on synthetic demo data**. Open Claude and ask:
 
-> Where is my portfolio leaking money?
+> Where is my portfolio leaking money in June 2026?
 
 You'll get the leak figure, the net-per-night metric, and your best and worst properties in under a minute. When you're ready to run the analysis against *your own* Wheelhouse portfolio, see [Wheelhouse API key](#wheelhouse-api-key) below.
+
+On live data the first call is slower: one request per listing, serial, to stay inside Wheelhouse's 60 req/min limit — 3 listings ≈ 5 s, 73 listings ≈ 90 s. Results are then cached for 10 minutes.
 
 ## What you get
 
@@ -80,7 +82,7 @@ The safety model in one line: the analysis tools (`analyze_portfolio`, `compare_
 
 ## Proactive alerts (watch mode)
 
-`check_alerts` is read-only and checks two things: (1) upcoming gap nights priced below your cost floor (same data as `propose_decisions`, always the `recommended` risk preset, but this tool never saves proposals to the decision log), and (2) new bookings since the last check, each shown **net of turnover costs** — the same twist as the rest of the server, now in a booking notification. The first run establishes a baseline (records existing bookings without alerting on them); later runs alert only on genuinely new ones.
+`check_alerts` is read-only and checks two things: (1) upcoming gap nights priced below your cost floor (same data as `propose_decisions`, always the `recommended` risk preset, but this tool never saves proposals to the decision log), and (2) new bookings since the last check, each shown **net of turnover costs** — the same twist as the rest of the server, now in a booking notification. The first run establishes a baseline (records existing bookings without alerting on them); later runs alert on bookings that were not present in the previous check. The Wheelhouse reservation payload carries no creation timestamp, so a booking made earlier will surface the first time its dates enter the 120-day horizon — "new to this check", not "booked since yesterday".
 
 By default `check_alerts` is silent — it just returns the report as text, same as every other tool. To get pushed notifications, configure a channel:
 

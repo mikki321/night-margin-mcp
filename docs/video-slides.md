@@ -19,7 +19,7 @@ Final copy for the four slides used in the Loom video (see `docs/video-script.md
 
 **night-margin-mcp — every pricing decision, net of turnover costs**
 
-- Three MCP tools in Claude: `analyze_portfolio` · `compare_strategies` · `gap_night_check`
+- Eight MCP tools in Claude: three analyses (`analyze_portfolio` · `compare_strategies` · `gap_night_check`), the decision loop (`propose_decisions` → `apply_decision` → `revert_decision`), monthly targets, and `check_alerts`
 - Live bookings from the **Wheelhouse RM API** — tested on a real 73-listing portfolio
 - Turnover costs from your own operation: flat average, per-type tiers, or per-booking CSV
 - Zero config → first answer in under 60 seconds (synthetic demo portfolio built in)
@@ -67,8 +67,8 @@ claude mcp add margin -- npx -y night-margin-mcp
 ```
 
 - Works instantly on demo data — add `WHEELHOUSE_API_KEY` to run your own portfolio.
-- Next: the decision loop — `propose_decisions` → `apply_decision` (writes prices to Wheelhouse: dry-run · confirm · revert) → `review_decision` + monthly net targets.
+- **New in 0.3.0:** the decision loop — `propose_decisions` → `apply_decision` (writes prices to Wheelhouse: dry-run · confirm · revert) → `revert_decision`, plus monthly net targets.
 - **Built by a property manager who runs 73 listings in Lapland — for operators like us.**
 - github.com/mikki321/night-margin-mcp · live demo: mikki321.github.io/night-margin-mcp
 
-*(If 0.3.0 ships before recording, change the "Next:" bullet to "New in 0.3.0:" — nothing else changes.)*
+
