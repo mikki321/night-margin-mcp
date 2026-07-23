@@ -19,7 +19,7 @@ Final copy for the four slides used in the Loom video (see `docs/video-script.md
 
 **night-margin-mcp — every pricing decision, net of turnover costs**
 
-- Eight MCP tools in Claude: three analyses (`analyze_portfolio` · `compare_strategies` · `gap_night_check`), the decision loop (`propose_decisions` → `apply_decision` → `revert_decision`), monthly targets, and `check_alerts`
+- Nine MCP tools in Claude: three analyses (`analyze_portfolio` · `compare_strategies` · `gap_night_check`), the decision loop (`propose_decisions` → `apply_decision` → `revert_decision`), monthly targets, `check_alerts`, and `review_history` (a mirror of your own past months)
 - Live bookings from the **Wheelhouse RM API** — tested on a real 73-listing portfolio
 - Turnover costs from your own operation: flat average, per-type tiers, or per-booking CSV
 - Zero config → first answer in under 60 seconds (synthetic demo portfolio built in)

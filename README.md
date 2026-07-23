@@ -43,7 +43,7 @@ Want to see the output before installing anything? **<https://mikki321.github.io
 
 ## Example prompts
 
-The server provides eight tools: three read-only analysis tools, a four-tool decision loop (see [The decision loop](#the-decision-loop)), and a proactive alerts tool (see [Proactive alerts](#proactive-alerts-watch-mode)). No dates needed — `analyze_portfolio` and `compare_strategies` default to the last 30 + next 90 days (recent turnovers + your booking horizon), `propose_decisions` to the next 30 days; pass `from`/`to` to change. Try these directly in Claude:
+The server provides nine tools: three read-only analysis tools, a four-tool decision loop (see [The decision loop](#the-decision-loop)), a proactive alerts tool (see [Proactive alerts](#proactive-alerts-watch-mode)), and `review_history` — a read-only mirror of your own past months net of estimated turnover cost (a description of what happened, never a forecast). No dates needed — `analyze_portfolio` and `compare_strategies` default to the last 30 + next 90 days (recent turnovers + your booking horizon), `propose_decisions` to the next 30 days; pass `from`/`to` to change. Try these directly in Claude:
 
 1. **`analyze_portfolio`** — where is the money leaking?
    > Where is my portfolio leaking money?
