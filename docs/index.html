@@ -130,6 +130,24 @@
   }
   .coverage[hidden] { display: none; }
 
+  /* ---- Margin Copilot cards ---- */
+  .cop-summary { font-size: 13px; color: var(--ink-2); margin: 4px 0 14px; line-height: 1.5; }
+  .cop-summary b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .cop-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); padding: 16px 18px; margin-bottom: 14px; }
+  .cop-card .rank { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+  .cop-card h3 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; margin: 3px 0 6px; }
+  .cop-card .facts { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; margin-bottom: 12px; }
+  .cop-card .facts b { color: var(--crit); font-variant-numeric: tabular-nums; }
+  .cop-opts { display: flex; flex-direction: column; gap: 8px; }
+  .cop-opt { border: 1px solid var(--border); border-radius: var(--r-md); padding: 10px 12px; position: relative; }
+  .cop-opt.best { border-color: color-mix(in oklab, var(--ink) 55%, transparent); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ink) 20%, transparent); }
+  .cop-opt .ohead { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cop-opt .olabel { font-size: 13px; font-weight: 650; }
+  .cop-opt .badge { font-size: 10.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--page); background: var(--ink); border-radius: 999px; padding: 2px 8px; }
+  .cop-opt .odetail { font-size: 12px; color: var(--ink-2); line-height: 1.45; margin-top: 4px; }
+  .cop-stage { margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .cop-stage a { color: var(--ink-2); font-weight: 600; cursor: pointer; text-decoration: underline; }
+
   .ranks { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-top: 2px; }
   .rankcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; }
   .rankcard h3 { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); padding: 12px 15px 9px; }
@@ -401,6 +419,7 @@
   </div>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Sections" hidden>
     <button type="button" role="tab" data-tab="dash" aria-selected="true">Dashboard</button>
+    <button type="button" role="tab" data-tab="copilot" aria-selected="false">Copilot</button>
     <button type="button" role="tab" data-tab="dec" aria-selected="false">Decisions</button>
     <button type="button" role="tab" data-tab="tgt" aria-selected="false">Targets</button>
     <button type="button" role="tab" data-tab="alerts" aria-selected="false">Alerts</button>
@@ -469,6 +488,12 @@
   <div class="desc">Gap-night floor decisions from the local decision log. “Propose now” scans the next 30 days for gap nights priced below your cost floor (turnover + travel + minimum margin). Preview always shows the exact payload first — nothing is written without an explicit confirm.</div>
   <div id="decNote" class="hint" style="margin-bottom:10px" hidden></div>
   <div id="decBody"><div class="empty">Loading…</div></div>
+</section>
+
+<section id="copilotSec" hidden>
+  <div class="shead"><h2>Margin Copilot</h2></div>
+  <div class="desc">Reads the same figures as Decisions, ranks where money moves the most, and for each one weighs the options and marks the best. Nothing here writes prices — staging a move routes to Decisions, where every write still goes through Preview and a two-step confirm.</div>
+  <div id="copilotBody"><div class="empty">Loading…</div></div>
 </section>
 
 <section id="tgtSec" hidden>
@@ -835,7 +860,8 @@ function startElapsed(btn, label) {
 
 /* ---- Tabs ---- */
 const VIEWS = {
-  dash: ["hero", "meta", "kpis", "mapSec", "triSec"],
+  dash: ["hero", "meta", "kpis", "coverage", "rankSec", "triSec", "mapSec"],
+  copilot: ["copilotSec"],
   dec: ["decSec"],
   tgt: ["tgtSec"],
   alerts: ["alertSec"],
@@ -858,6 +884,7 @@ function selectTab(name) {
     if (el) el.hidden = !show.has(id);
   }
   hideTip(); closeDetail();
+  if (name === "copilot") initCopilot();
   if (name === "dec") initDecisions();
   if (name === "tgt") initTargets();
   if (name === "alerts") initAlerts();
@@ -910,6 +937,64 @@ function twoStepConfirm({ verb, warnLabel, enabled, disabledReason, onConfirm })
 /* ---- Decisions ---- */
 let decInited = false;
 let riskChoice = "recommended";
+/* ---- Margin Copilot (read-only cards) ---- */
+let copilotInited = false;
+function initCopilot() {
+  if (copilotInited) return;   // read-only snapshot; reload the page to refresh
+  copilotInited = true;
+  refreshCopilot();
+}
+async function refreshCopilot() {
+  const body = document.getElementById("copilotBody");
+  body.innerHTML = `<div class="empty">Scanning the next 30 days for money-moves…</div>`;
+  try {
+    const d = await api("api/copilot");
+    renderCopilot(d);
+  } catch (err) {
+    body.innerHTML = `<div class="errline">Couldn’t load the Copilot: ${esc(err.message)}</div>`;
+  }
+}
+function renderCopilot(d) {
+  const body = document.getElementById("copilotBody");
+  if (d.blocked === "no-reservations") {
+    body.innerHTML = `<div class="empty">No reservations in ${esc(d.from)} → ${esc(d.to)}, so there are no gap nights to weigh.</div>`;
+    return;
+  }
+  if (!d.moves || d.moves.length === 0) {
+    body.innerHTML =
+      `<div class="empty"><b>No money-moves right now</b> — nothing in ${esc(d.from)} → ${esc(d.to)} is priced below your cost floor. ` +
+      `That is the good outcome: every gap night on offer at least covers what it costs to produce.</div>`;
+    return;
+  }
+  const nightWord = d.total_nights === 1 ? "night" : "nights";
+  const moveWord = d.moves.length === 1 ? "money-move" : "money-moves";
+  const parts = [
+    `<div class="cop-summary"><b>${d.moves.length} ${moveWord}</b> · <b>${eur(d.total_exposure)}</b> total below-floor exposure across ${d.total_nights} ${nightWord}, ranked by exposure. ` +
+      `Exposure is the gap between price and cost — not a forecast of lost revenue, since an unsold night earns nothing either way.</div>`,
+  ];
+  d.moves.forEach((m, i) => {
+    const opts = m.options.map(o =>
+      `<div class="cop-opt${o.recommended ? " best" : ""}">
+        <div class="ohead"><span class="olabel">${esc(o.label)}</span>${o.recommended ? `<span class="badge">Recommended</span>` : ""}</div>
+        <div class="odetail">${esc(o.detail)}</div>
+      </div>`).join("");
+    parts.push(
+      `<div class="cop-card">
+        <div class="rank">${i + 1} · Money leak</div>
+        <h3>${esc(m.property_id)} — ${m.nights} upcoming ${m.nights === 1 ? "night" : "nights"} below cost</h3>
+        <div class="facts">Wheelhouse recommends ${esc(m.rec_label)} on these nights; your cost floor is ${esc(m.floor_label)}. Below-floor exposure: <b>${eur(m.exposure)}</b>.</div>
+        <div class="cop-opts">${opts}</div>
+        <div class="cop-stage">To stage the recommended move, open <a data-goto="dec">Decisions</a> and press <b>Propose now</b> — every price change is previewed and needs a two-step confirm before anything is written.</div>
+      </div>`);
+  });
+  if (d.price_horizon && d.price_horizon < d.to) {
+    parts.push(`<div class="cop-summary">Checked through ${esc(d.price_horizon)} only — Wheelhouse price recommendations cover a rolling ~30-night horizon; nights after that had no price to weigh.</div>`);
+  }
+  body.innerHTML = parts.join("");
+  body.querySelectorAll("a[data-goto]").forEach(a =>
+    a.addEventListener("click", () => selectTab(a.dataset.goto)));
+}
+
 function initDecisions() {
   if (decInited) { refreshDecisions(); return; }
   decInited = true;

@@ -147,6 +147,109 @@ function renderMove(m: Move, i: number): string {
   return lines.join("\n");
 }
 
+/** Yksi option-vaihtoehto (rakenteinen — UI ja tekstiformatointi jakavat tämän). */
+export interface MoveOption {
+  key: "hold" | "guard" | "min_stay";
+  label: string;
+  recommended: boolean;
+  detail: string;
+}
+
+/** Rakenteinen Copilot-tulos: sama data jonka sekä MCP-tool että web-UI renderöivät. */
+export interface CopilotResult {
+  from: string;
+  to: string;
+  isDefault: boolean;
+  blocked?: "entirely-past" | "no-reservations";
+  price_horizon: string | null;
+  total_exposure: number;
+  total_nights: number;
+  moves: Array<{
+    property_id: string;
+    nights: number;
+    exposure: number;
+    floor_label: string;
+    rec_label: string;
+    options: MoveOption[];
+  }>;
+}
+
+function moveOptions(m: Move): MoveOption[] {
+  const options: MoveOption[] = [
+    {
+      key: "hold",
+      label: "Hold",
+      recommended: false,
+      detail: `Keep the current recommendation. Every night that sells at ${recLabel(m)} loses money against your ${floorLabel(m)} floor; ${eur(m.exposure)} of below-floor exposure stays on the table.`,
+    },
+    {
+      key: "guard",
+      label: "Guard the floor",
+      recommended: true,
+      detail: `Stage a floor of ${floorLabel(m)} on these nights. The night clears at the floor or stays open — either way no below-cost sale. Trade-off: nights that would only clear below the floor stay empty (an empty night earns nothing either way).`,
+    },
+  ];
+  if (m.min_stay < 2 && m.longest_cluster >= 3) {
+    const stay = Math.min(3, m.longest_cluster);
+    const lowered = Math.ceil(m.floor_min / stay);
+    options.push({
+      key: "min_stay",
+      label: "Raise the minimum stay",
+      recommended: false,
+      detail: `Set a ${stay}-night minimum on these dates: the same turnover spreads over ${stay} nights and the floor falls to about ${eur(lowered)}. Trade-off: you turn away shorter bookings.`,
+    });
+  }
+  return options;
+}
+
+/**
+ * Read-only: hakee saman datan kuin propose_decisions, rakentaa rahaliikkeet ja
+ * palauttaa RAKENTEISEN tuloksen. Sekä runMarginCopilot (teksti) että web-UI
+ * käyttävät tätä — yksi totuus, ei kahta toteutusta.
+ */
+export async function gatherCopilotMoves(
+  args: MarginCopilotArgs,
+  env: NodeJS.ProcessEnv = process.env,
+  deps: MarginCopilotDeps = {},
+): Promise<CopilotResult> {
+  const risk: RiskPreset = args.risk ?? DEFAULT_RISK_PRESET;
+  const adjustedMargin = riskAdjustedMargin(minMarginFromEnv(env), risk);
+  const proposeArgs: ProposeArgs = { from: args.from, to: args.to, risk };
+  const proposeDeps: ProposeDeps = { client: deps.client, now: deps.now };
+  const result = await gatherGapFloorProposals(proposeArgs, env, proposeDeps, adjustedMargin);
+
+  if (result.blocked === "entirely-past" || result.blocked === "no-reservations") {
+    return {
+      from: result.from,
+      to: result.to,
+      isDefault: result.isDefault,
+      blocked: result.blocked,
+      price_horizon: result.priceHorizon ?? null,
+      total_exposure: 0,
+      total_nights: 0,
+      moves: [],
+    };
+  }
+
+  const moves = buildMoves(result.proposals);
+  return {
+    from: result.from,
+    to: result.to,
+    isDefault: result.isDefault,
+    price_horizon: result.priceHorizon ?? null,
+    total_exposure: moves.reduce((s, m) => s + m.exposure, 0),
+    total_nights: moves.reduce((s, m) => s + m.nights, 0),
+    moves: moves.map((m) => ({
+      property_id: m.property_id,
+      nights: m.nights,
+      exposure: m.exposure,
+      floor_label: floorLabel(m),
+      rec_label: recLabel(m),
+      options: moveOptions(m),
+    })),
+  };
+}
+
 export async function runMarginCopilot(
   args: MarginCopilotArgs,
   env: NodeJS.ProcessEnv = process.env,

@@ -29,7 +29,7 @@ const HOST = "127.0.0.1";
 /* dist/-importit pathToFileURL:llä — repopolussa on välilyönti, joten pelkkä
  * merkkijonopolku import()-kutsussa hajoaisi; file://-URL enkoodaa sen oikein. */
 const dist = (p) => import(pathToFileURL(join(ROOT, "dist", p)).href);
-const [config, calc, sources, reservationSourceMod, resolveCostsMod, state, propose, apply, revert, setTarget, checkAlerts, whClient, whAdapter, simulate, risk, gapCheck] =
+const [config, calc, sources, reservationSourceMod, resolveCostsMod, state, propose, apply, revert, setTarget, checkAlerts, whClient, whAdapter, simulate, risk, gapCheck, copilot] =
   await Promise.all([
     dist("config.js"),
     dist("core/calc.js"),
@@ -47,6 +47,7 @@ const [config, calc, sources, reservationSourceMod, resolveCostsMod, state, prop
     dist("core/simulate.js"),
     dist("core/risk.js"),
     dist("tools/gapNightCheck.js"),
+    dist("tools/marginCopilot.js"),
   ]);
 
 const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
@@ -870,6 +871,19 @@ async function handleApi(req, res, url) {
     const from = requireDateParam(url.searchParams.get("from") ?? undefined, "from");
     const to = requireDateParam(url.searchParams.get("to") ?? undefined, "to");
     return json(res, 200, await buildAnalysis(from, to));
+  }
+
+  if (path === "/api/copilot" && method === "GET") {
+    /* READ-ONLY: sama jaettu client/lähde kuin propose (ei fan-outia, ei
+     * kirjoituksia). Palauttaa rakenteiset rahaliikkeet — frontend renderöi
+     * kortit. Ikkuna oletuksena propose-ikkuna (seur. 30 pv). */
+    const src = getSources();
+    const result = await copilot.gatherCopilotMoves(
+      {},
+      process.env,
+      { client: src.client },
+    );
+    return json(res, 200, result);
   }
 
   if (path === "/api/decisions" && method === "GET") {
