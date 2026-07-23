@@ -10,7 +10,7 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 **[SCREEN: Slide 1 ("Nobody knows what a night costs to produce") + Loom camera bubble on.]**
 
-> I run seventy-three short-term rentals in Lapland. My revenue tool optimizes gross — and it's good at it. But nobody knows what a night costs to produce. Cleaning, laundry, travel. So I built night-margin — the margin guard that nets every decision against turnover cost, right inside Claude.
+> I run seventy-three short-term rentals in Lapland. My revenue tool optimizes gross — and it's good at it. But nobody knows what a night costs to produce. Cleaning, laundry, travel. When that cost is a quarter of a cheap night's revenue, filling the calendar can lose you money. So I built night-margin — the margin guard that nets every decision against turnover cost, right inside Claude. It even tells you when the answer is "do nothing" — and means it.
 
 ## (0:20 – 0:45) Install — under 60 seconds
 
@@ -62,9 +62,9 @@ Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every
 
 ---
 
-## Appendix — alternative shot list (localhost UI in DEMO mode)
+## Appendix — FALLBACK ONLY: localhost UI shot list (demo mode)
 
-Six independent review panels stress-tested the build on 23.7. Five of six named the *decision*, not the analysis, as the strongest thing here. If you have time for a second take, this version leads with it. Everything below runs in **demo mode with no API key** — instant, no real addresses, and the leak zone still renders (verified).
+**Not the primary video.** The localhost UI is a local dev tool — it is not in the npm package, so no user who installs night-margin ever sees it. Lead the video with the MCP tools in Claude (the beats above), which is what people actually get. Keep this only as a backup if the Claude screen recording won't cooperate. Everything below runs in **demo mode with no API key** — instant, no real addresses, and the leak zone still renders (verified). Its one merit: it shows a decision being made and undone live in about 4 seconds, which the MCP transcript can't dramatize as tightly.
 
 Run it as: `NM_STATE_DIR=/tmp/nm-demo npm run ui` → <http://127.0.0.1:8788>
 
