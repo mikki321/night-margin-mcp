@@ -9,6 +9,7 @@ import {
 } from "../src/config.js";
 import { analyzePortfolioInputSchema } from "../src/tools/analyzePortfolio.js";
 import { compareStrategiesInputSchema } from "../src/tools/compareStrategies.js";
+import { reviewHistoryInputSchema } from "../src/tools/reviewHistory.js";
 
 // Injektoitu "nyt" — 2026-07-22 UTC-päivänä
 const NOW = new Date("2026-07-22T15:30:00Z");
@@ -103,6 +104,28 @@ describe("tool-skeemat — from/to valinnaisia", () => {
     expect(compareStrategiesInputSchema.to.description).toContain(
       "optional — defaults to last 30 + next 90 days",
     );
+  });
+});
+
+describe("review_history — skeema", () => {
+  it("hyväksyy tyhjät argumentit", () => {
+    expect(z.object(reviewHistoryInputSchema).parse({})).toEqual({});
+  });
+
+  it("hyväksyy pelkän fromin", () => {
+    expect(z.object(reviewHistoryInputSchema).parse({ from: "2026-01-01" })).toEqual({
+      from: "2026-01-01",
+    });
+  });
+
+  it("hylkää negatiivisen avg_turnover_costin", () => {
+    expect(() => z.object(reviewHistoryInputSchema).parse({ avg_turnover_cost: -1 })).toThrow();
+  });
+
+  it("describet mainitsevat koko historian ja kuukausi-inklusiivisen semantiikan", () => {
+    expect(reviewHistoryInputSchema.from.description).toContain("all available history");
+    expect(reviewHistoryInputSchema.to.description).toContain("INCLUSIVE");
+    expect(reviewHistoryInputSchema.to.description).toContain("MONTH granularity");
   });
 });
 

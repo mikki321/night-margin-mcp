@@ -9,6 +9,7 @@ import { compareStrategiesInputSchema, runCompareStrategies } from "./tools/comp
 import { runGapNightCheck } from "./tools/gapNightCheck.js";
 import { proposeDecisionsInputSchema, runProposeDecisions } from "./tools/proposeDecisions.js";
 import { revertDecisionInputSchema, runRevertDecision } from "./tools/revertDecision.js";
+import { reviewHistoryInputSchema, runReviewHistory } from "./tools/reviewHistory.js";
 import { runSetTarget, setTargetInputSchema } from "./tools/setTarget.js";
 
 /**
@@ -239,6 +240,31 @@ async function main(): Promise<void> {
     async (args) => {
       try {
         const text = await runCheckAlerts(args);
+        return { content: [{ type: "text" as const, text }] };
+      } catch (e) {
+        return {
+          content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  server.registerTool(
+    "review_history",
+    {
+      title: "Review your own past months (net of estimated turnover cost)",
+      description:
+        "Season review: mirrors your OWN past monthly Wheelhouse KPIs back at you — per month, your revenue, an ESTIMATED turnover cost, estimated net, and what fraction of gross the cleaning ate (turnover share), plus occupancy and ADR. " +
+        "Turnover cost is estimated from monthly averages (occupied nights ÷ average length of stay × AVG_TURNOVER_COST), not measured per booking, and is labeled as an estimate. " +
+        "It describes what already happened over your real history; it does NOT forecast, does NOT recommend or rank strategies, and does NOT say what you 'should have' done or what another strategy 'would have' earned. " +
+        "Window defaults to all available history (usually only a handful of months per listing — it states the real span, never 'last year' or '5 years' unless the data actually covers it). " +
+        "Read-only — never changes any prices and never writes any state. Requires WHEELHOUSE_API_KEY.",
+      inputSchema: reviewHistoryInputSchema,
+    },
+    async (args) => {
+      try {
+        const text = await runReviewHistory(args);
         return { content: [{ type: "text" as const, text }] };
       } catch (e) {
         return {

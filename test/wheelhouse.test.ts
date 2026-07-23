@@ -111,6 +111,28 @@ describe("WheelhouseClient", () => {
     const client = clientWith(async () => ok({ data: [rec] }));
     expect(await client.priceRecommendations(1, "airbnb")).toEqual([rec]);
   });
+
+  it("monthlyKpis palauttaa {currency, data} ja kanava on URL:ssa enkoodattuna", async () => {
+    const row = { month: "2026-01-01", revenue: 1000, occupancy: 0.5, adr: 100, los: 4 };
+    let seenUrl = "";
+    const client = clientWith(async (url) => {
+      seenUrl = url;
+      return ok({ currency: "EUR", data: [row] });
+    });
+    const res = await client.monthlyKpis(7, "hostaway");
+    expect(res).toEqual({ currency: "EUR", data: [row] });
+    expect(seenUrl).toContain("/listings/7/kpis/monthly?channel=hostaway");
+  });
+
+  it("monthlyKpis: puuttuva currency → oletus EUR", async () => {
+    const client = clientWith(async () => ok({ data: [] }));
+    expect((await client.monthlyKpis(1, "hostaway")).currency).toBe("EUR");
+  });
+
+  it("monthlyKpis: data ei ole array → selkeä virhe", async () => {
+    const client = clientWith(async () => ok({ currency: "EUR", data: null }));
+    await expect(client.monthlyKpis(1, "hostaway")).rejects.toThrow(/missing the data array/);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -39,6 +39,17 @@ export interface WhMinStayDay {
   min_stay: number | null;
 }
 
+/** kpis/monthly data[]-rivi. adr/los/occupancy voivat olla null. comp_set_* jätetään
+ *  tarkoituksella tyypittämättä ja käyttämättä (0/null = "ei dataa", ei "kilpailija ansaitsi €0"). */
+export interface WhMonthlyKpi {
+  month: string;            // "YYYY-MM-01"
+  revenue: number;
+  occupancy: number | null; // 0..1
+  adr: number | null;
+  los: number | null;
+  revpar?: number | null;
+}
+
 export type FetchLike = (
   url: string,
   init?: { method?: string; headers?: Record<string, string>; body?: string },
@@ -222,6 +233,30 @@ export class WheelhouseClient {
       throw new Error("Wheelhouse min_stay_calendar response was not in the expected shape (array)");
     }
     return body as WhMinStayDay[];
+  }
+
+  /**
+   * Listingin kuukausi-KPI:t kanavalle. Palauttaa {currency, data}. Heittää
+   * normaalisti virheissä (myös 404 WheelhouseHttpError:na) — 404-sieto kuuluu
+   * kutsujalle (skip + note), kuten reservations-putkessa. GET → perii cachen,
+   * throttlen ja 429-backoffin request()-polusta.
+   */
+  async monthlyKpis(
+    listingId: string | number,
+    channel: string,
+  ): Promise<{ currency: string; data: WhMonthlyKpi[] }> {
+    const body = await this.request(
+      `/listings/${listingId}/kpis/monthly?channel=${encodeURIComponent(channel)}`,
+    );
+    const data = (body as { data?: unknown }).data;
+    if (!Array.isArray(data)) {
+      throw new Error("Wheelhouse kpis/monthly response is missing the data array");
+    }
+    const currency =
+      typeof (body as { currency?: unknown }).currency === "string"
+        ? ((body as { currency: string }).currency).trim() || "EUR"
+        : "EUR";
+    return { currency, data: data as WhMonthlyKpi[] };
   }
 
   // -------------------------------------------------------------------------
