@@ -318,6 +318,34 @@
   .plan-hist { margin-top: 12px; }
   .plan-hist > b { font-size: 12px; color: var(--ink-2); }
   .plan-hist .hint { margin-top: 4px; }
+
+  /* ---- Nightly view + downside row ----
+     Nightly series colors are the dataviz categorical slots (slot 1 blue for
+     the WH recommendation, slot 2 orange for the cost floor), theme-stepped
+     per the reference palette. The leak wash reuses --neg-1 (status = the
+     color MEANS "money leaking", not identity) and the area band reuses
+     --mid — no new hues beyond the documented slot 2. */
+  .pl-rc { stroke: #2a78d6; }
+  .pl-rcfill { fill: #2a78d6; }
+  .pl-fl { stroke: #eb6834; }
+  .pl-flfill { fill: #eb6834; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .pl-rc { stroke: #3987e5; }
+    :root:where(:not([data-theme="light"])) .pl-rcfill { fill: #3987e5; }
+    :root:where(:not([data-theme="light"])) .pl-fl { stroke: #d95926; }
+    :root:where(:not([data-theme="light"])) .pl-flfill { fill: #d95926; }
+  }
+  :root[data-theme="dark"] .pl-rc { stroke: #3987e5; }
+  :root[data-theme="dark"] .pl-rcfill { fill: #3987e5; }
+  :root[data-theme="dark"] .pl-fl { stroke: #d95926; }
+  :root[data-theme="dark"] .pl-flfill { fill: #d95926; }
+  .plan-nightwrap { overflow-x: auto; }
+  .plan-nightwrap svg { display: block; width: 100%; min-width: 620px; height: auto; }
+  .plan-down { margin: 12px 0 2px; padding-top: 10px; border-top: 1px solid var(--grid); font-size: 12.5px; color: var(--ink-2); }
+  .plan-down b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  .plan-down .wneg { color: var(--crit); }
+  .plan-down .stress-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+  .plan-down code { background: var(--mid); border-radius: 5px; padding: 1px 5px; font-size: 11.5px; }
 </style>
 </head>
 <body>
@@ -1086,7 +1114,7 @@ const PLAN_STRATEGIES = [
   ["fill_push", "Fill push"],
 ];
 const PLAN_LABELS = Object.fromEntries(PLAN_STRATEGIES);
-const planState = { pid: null, month: null, risk: "recommended", strategy: "current_pace", plan: null, seq: 0 };
+const planState = { pid: null, month: null, risk: "recommended", strategy: "current_pace", plan: null, seq: 0, view: "monthly", stress: 0 };
 const planFetchCache = new Map(); // "pid|month|risk" → { at, plan }
 
 function planShortMonth(m) {
@@ -1122,6 +1150,10 @@ function renderPlanShell() {
         <button type="button" data-risk="recommended" aria-pressed="${String(planState.risk === "recommended")}" title="Recommended — minimum margin as configured">REC</button>
         <button type="button" data-risk="aggressive" aria-pressed="${String(planState.risk === "aggressive")}" title="Aggressive — 40% of the minimum margin">AGG</button>
       </div>
+      <div class="seg" role="group" aria-label="Plan view" id="planViewSeg">
+        <button type="button" data-view="monthly" aria-pressed="${String(planState.view === "monthly")}">Monthly pace</button>
+        <button type="button" data-view="nightly" aria-pressed="${String(planState.view === "nightly")}">Nightly prices</button>
+      </div>
     </div>
     <div id="planContent"></div>`;
   pp.querySelector(".dclose").addEventListener("click", closePlan);
@@ -1136,8 +1168,33 @@ function renderPlanShell() {
     const btn = e.target.closest("button[data-risk]");
     if (!btn || btn.dataset.risk === planState.risk) return;
     planState.risk = btn.dataset.risk;
+    /* Nightly view: the floor is recomputed in the browser from the raw
+       per-night components the server already sent (floor_inputs) — no new
+       fetch. The monthly projections are server-computed per risk, so that
+       view still reloads (usually a warm cache hit). */
+    if (planState.view === "nightly" && planState.plan && planState.plan.floor_inputs) {
+      for (const b of document.querySelectorAll("#planRiskSeg button")) b.setAttribute("aria-pressed", String(b === btn));
+      renderPlanStat();
+      drawNightChart();
+      renderPlanTable();
+      return;
+    }
     renderPlanShell();
     loadPlan();
+  });
+  document.getElementById("planViewSeg").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-view]");
+    if (!btn || btn.dataset.view === planState.view) return;
+    planState.view = btn.dataset.view;
+    for (const b of document.querySelectorAll("#planViewSeg button")) b.setAttribute("aria-pressed", String(b === btn));
+    /* If the risk was switched client-side while in nightly view, the cached
+       monthly projections belong to the old risk — reload on the way back. */
+    if (planState.view === "monthly" && planState.plan && planState.plan.risk !== planState.risk) {
+      renderPlanShell();
+      loadPlan();
+      return;
+    }
+    updatePlanView();
   });
 }
 async function loadPlan() {
@@ -1190,9 +1247,18 @@ function planStatLine(plan) {
   else if (plan.mode === "demo") parts.push("recommendations: demo estimate (property average rate)");
   else if (plan.remaining.open_nights > 0) parts.push("no Wheelhouse recommendations inside this month");
   if (plan.remaining.global_min_stay) parts.push(`min stay ${plan.remaining.global_min_stay} night${plan.remaining.global_min_stay === 1 ? "" : "s"}`);
-  parts.push(`cost floor ${eur(plan.remaining.floor)} (${esc(plan.risk)})`);
+  /* Floor follows the UI's risk choice: in nightly view the risk can change
+     client-side without a refetch, so read the per-preset floors the server
+     sent instead of the (then stale) plan.remaining.floor. */
+  const fi = plan.floor_inputs;
+  const efFloor = fi && fi.floors && fi.floors[planState.risk] !== undefined ? fi.floors[planState.risk] : plan.remaining.floor;
+  parts.push(`cost floor ${eur(efFloor)} (${esc(planState.risk)})`);
   parts.push(`${plan.remaining.open_nights} open night${plan.remaining.open_nights === 1 ? "" : "s"} left`);
   return parts.join('<span class="sep">·</span>');
+}
+function renderPlanStat() {
+  const el = document.getElementById("planStat");
+  if (el && planState.plan) el.innerHTML = planStatLine(planState.plan);
 }
 function planHistoryHtml(plan) {
   const h = plan.history || { items: [], notes: [] };
@@ -1221,13 +1287,21 @@ function renderPlanContent() {
   const recT = plan.recommended_targets.floor_guard;
   const pace = plan.projections.current_pace.end_gross;
   content.innerHTML = `
-    <div class="plan-stat">${planStatLine(plan)}</div>
-    <div class="plan-chartwrap" id="planChart"></div>
-    <div class="legend" id="planLegend"></div>
+    <div class="plan-stat" id="planStat"></div>
+    <div id="planViewMonthly">
+      <div class="plan-chartwrap" id="planChart"></div>
+      <div class="legend" id="planLegend"></div>
+    </div>
+    <div id="planViewNightly" hidden>
+      <div class="plan-nightwrap" id="planNight"></div>
+      <div class="legend" id="planNightLegend"></div>
+      <div class="plan-stat" id="planNightNote" style="margin-top:8px"></div>
+    </div>
     <div class="plan-strats" role="radiogroup" aria-label="Projection strategy">` +
     PLAN_STRATEGIES.map(([k, label]) =>
       `<label><input type="radio" name="planStrat" value="${k}"${k === planState.strategy ? " checked" : ""}>${label}</label>`).join("") +
     `</div>
+    <div class="plan-down" id="planDown" hidden></div>
     <div class="plan-rec">
       <span>Recommended target for ${esc(monthLabel(plan.month))}: <b>${eur(recT)}</b> (floor guard) — you’re currently pacing to <b>${eur(pace)}</b>.</span>
       <button class="btn" id="useTargetBtn" type="button">Use ${eur(recT)} as target</button>
@@ -1238,7 +1312,7 @@ function renderPlanContent() {
   content.querySelector(".plan-strats").addEventListener("change", e => {
     if (e.target.name !== "planStrat") return;
     planState.strategy = e.target.value;
-    drawPlanChart();
+    if (planState.view === "monthly") drawPlanChart();
     renderPlanAssumptions();
     renderPlanTable();
   });
@@ -1253,9 +1327,63 @@ function renderPlanContent() {
     card.scrollIntoView({ behavior: "smooth", block: "center" });
     input.focus();
   });
-  drawPlanChart();
+  renderPlanStat();
+  renderPlanDownside();
   renderPlanAssumptions();
+  updatePlanView();
+}
+function updatePlanView() {
+  const mv = document.getElementById("planViewMonthly");
+  const nv = document.getElementById("planViewNightly");
+  if (!mv || !nv) return;
+  mv.hidden = planState.view !== "monthly";
+  nv.hidden = planState.view !== "nightly";
+  hideTip();
+  if (planState.view === "monthly") drawPlanChart();
+  else drawNightChart();
   renderPlanTable();
+}
+/* ---- Downside row: worst case per strategy + user-set cancellation stress.
+   All three stress branches arrive precomputed in plan.worst_cases, so the
+   stress toggle never refetches. Worst cases are guaranteed components
+   (already-booked gross) + the chosen stress — never forecasts. ---- */
+function renderPlanDownside() {
+  const el = document.getElementById("planDown");
+  const plan = planState.plan;
+  if (!el || !plan) return;
+  const wcs = plan.worst_cases;
+  if (!wcs) { el.hidden = true; return; }
+  const wc = wcs[String(planState.stress)];
+  const cp = wc.current_pace, fg = wc.floor_guard, fp = wc.fill_push;
+  const fmt = v => `<b${v < 0 ? ' class="wneg"' : ""}>${eur(v)}</b>`;
+  const fpNote = fp.below_cost_nights > 0
+    ? ` (includes ${fp.below_cost_nights} below-cost night${fp.below_cost_nights === 1 ? "" : "s"})`
+    : " (no below-cost nights this month)";
+  const verdict = fp.end_net_estimate < fg.end_net_estimate
+    ? "Floor guard has the best guaranteed outcome — whatever happens to demand, no night sells at a loss."
+    : "All three strategies share the same worst case this month — no discounted night is priced below its own cost.";
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="stress-row">
+      <span>Stress test — assume</span>
+      <div class="seg" role="group" aria-label="Share of booked-ahead gross assumed to cancel" id="planStressSeg">${
+        [0, 10, 25].map(s2 => `<button type="button" data-stress="${s2}" aria-pressed="${String(s2 === planState.stress)}">${s2}%</button>`).join("")
+      }</div>
+      <span>of booked-ahead gross cancels</span>
+    </div>
+    <div>Worst case (month-end net): current pace ${fmt(cp.end_net_estimate)} · floor guard ${fmt(fg.end_net_estimate)} (no below-cost risk) · fill push ${fmt(fp.end_net_estimate)}${fpNote}</div>
+    <div class="hint" style="margin-top:4px">${esc(verdict)} Computed from already-booked revenue plus your chosen stress — not a forecast; assumptions below.</div>
+    <div class="hint" style="margin-top:2px">Early warning shrinks losses — the check_alerts tool (or <code>npx night-margin-mcp --watch</code> in cron) runs this floor check daily.</div>`;
+  document.getElementById("planStressSeg").addEventListener("click", e => {
+    const btn = e.target.closest("button[data-stress]");
+    if (!btn) return;
+    const v = Number(btn.dataset.stress);
+    if (v === planState.stress) return;
+    planState.stress = v;
+    renderPlanDownside();
+    renderPlanAssumptions();
+    if (planState.view === "monthly") drawPlanChart();
+  });
 }
 function renderPlanAssumptions() {
   const ul = document.getElementById("planAssump");
@@ -1263,9 +1391,15 @@ function renderPlanAssumptions() {
   if (!ul || !plan) return;
   const proj = plan.projections[planState.strategy];
   const notes = [...((plan.area && plan.area.notes) || []), ...(plan.remaining.rec_note ? [plan.remaining.rec_note] : [])];
+  const wcs = plan.worst_cases;
+  const w = wcs ? wcs[String(planState.stress)][planState.strategy] : null;
   ul.innerHTML =
     `<li>Selected strategy “${esc(PLAN_LABELS[planState.strategy])}”: projected month-end gross ${eur(proj.end_gross)}, net estimate ${eur(proj.end_net_estimate)} after new-night turnover costs.</li>` +
     proj.assumptions.map(a => `<li>${esc(a)}</li>`).join("") +
+    (w
+      ? `<li>Worst case for “${esc(PLAN_LABELS[planState.strategy])}” at ${planState.stress}% stress: gross ${eur(w.end_gross)}, net ${eur(w.end_net_estimate)}.</li>` +
+        w.assumptions.map(a => `<li>${esc(a)}</li>`).join("")
+      : "") +
     notes.map(n => `<li>Data note: ${esc(n)}</li>`).join("");
 }
 function planNiceCeil(v) {
@@ -1290,11 +1424,22 @@ function drawPlanChart() {
   const pastCount = todayIdx === -1 ? N : todayIdx;
   const monthOver = pastCount === N;
 
+  /* Worst case for the selected strategy at the chosen stress — a guaranteed
+     lower bound (booked gross minus the stress haircut), not a forecast. */
+  const wcAll = plan.worst_cases;
+  const wcSel = wcAll ? wcAll[String(planState.stress)][planState.strategy] : null;
+  const wcGross = wcSel && !monthOver ? wcSel.end_gross : null;
+  // Netto on tämän tuotteen otsikkoluku — worst-case-VIIVA on bruttoakselilla,
+  // joten se merkitään selvästi brutoksi ja netto tuodaan legendaan. Ilman
+  // tätä fill-pushin brutto-worst-case istuu lähellä projektiota ja lukisi
+  // paljon ruusuisempana kuin todellinen netto (esim. €1 684 brutto / €4 netto).
+  const wcNet = wcSel && !monthOver ? wcSel.end_net_estimate : null;
+
   const compact = wrap.clientWidth > 0 && wrap.clientWidth < 520;
   const W = compact ? 400 : 680, H = compact ? 230 : 260;
   const M = { l: 46, r: compact ? 14 : 128, t: 16, b: 26 };
   const pw = W - M.l - M.r, ph = H - M.t - M.b;
-  const ymax = planNiceCeil(Math.max(booked[N - 1] || 0, proj[N - 1] || 0, targetVal, 100) * 1.06);
+  const ymax = planNiceCeil(Math.max(booked[N - 1] || 0, proj[N - 1] || 0, targetVal, wcGross || 0, 100) * 1.06);
   const x = i => M.l + (N > 1 ? (i / (N - 1)) * pw : pw / 2);
   const y = v => M.t + (1 - v / ymax) * ph;
   const path = (from, to, arr, fn) => {
@@ -1307,7 +1452,7 @@ function drawPlanChart() {
     return d;
   };
 
-  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative gross for ${esc(plan.property_id)} in ${esc(monthLabel(plan.month))}: booked, ${esc(PLAN_LABELS[planState.strategy])} projection${targetVal ? ", target pace" : ""}.">`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Cumulative gross for ${esc(plan.property_id)} in ${esc(monthLabel(plan.month))}: booked, ${esc(PLAN_LABELS[planState.strategy])} projection${targetVal ? ", target pace" : ""}${wcGross !== null ? `, worst case ${eur(wcGross)} at ${planState.stress}% cancellation stress` : ""}.">`;
   /* Grid + y ticks (clean quarters of a nice ceiling). */
   for (let q = 0; q <= 4; q++) {
     const v = (ymax / 4) * q;
@@ -1327,6 +1472,18 @@ function drawPlanChart() {
   /* Target pace: straight gray dashed line to the target at month end. */
   if (targetVal > 0) {
     s += `<path d="M${x(0).toFixed(1)} ${y(targetVal / N).toFixed(1)}L${x(N - 1).toFixed(1)} ${y(targetVal).toFixed(1)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-dasharray="4 4"/>`;
+  }
+  /* Worst case: thin dashed guide in the crit tone from today's booked level
+     to the guaranteed month-end floor. When a target is set the fourth line
+     slot is taken (dataviz: max 4 series) — a small lower-bound tick at
+     month end + the downside row below carry the value instead. */
+  if (wcGross !== null) {
+    if (targetVal > 0) {
+      s += `<path d="M${(x(N - 1) - 5).toFixed(1)} ${y(wcGross).toFixed(1)}h10" stroke="var(--crit)" stroke-width="2"/>`;
+    } else {
+      const wcStart = pastCount > 0 ? booked[pastCount - 1] : 0;
+      s += `<path d="M${x(Math.max(pastCount - 1, 0)).toFixed(1)} ${y(wcStart).toFixed(1)}L${x(N - 1).toFixed(1)} ${y(wcGross).toFixed(1)}" fill="none" stroke="var(--crit)" stroke-width="1.5" stroke-dasharray="3 3"/>`;
+    }
   }
   /* Projection (dashed, from today) — drawn under the actual line. */
   if (!monthOver) {
@@ -1353,6 +1510,7 @@ function drawPlanChart() {
       labels.push({ v: proj[N - 1] || 0, cls: "pl-pfill", text: PLAN_LABELS[planState.strategy], val: eur(proj[N - 1] || 0) });
     }
     if (targetVal > 0) labels.push({ v: targetVal, cls: "", text: "Target", val: eur(targetVal) });
+    if (wcGross !== null) labels.push({ v: wcGross, cls: "wc", text: "Worst case", val: `${eur(wcGross)} gross` });
     /* ty = the true y of the line's end; y = where the label sits. When
        collisions push a label off its anchor, a thin leader tick connects it
        back to its line end — nudging alone would detach the label from its
@@ -1369,9 +1527,11 @@ function drawPlanChart() {
       }
     }
     for (const l of labels) {
-      const key = l.cls
-        ? `<circle class="${l.cls}" cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3"/>`
-        : `<circle cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3" fill="var(--muted)"/>`;
+      const key = l.cls === "wc"
+        ? `<circle cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3" fill="var(--crit)"/>`
+        : l.cls
+          ? `<circle class="${l.cls}" cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3"/>`
+          : `<circle cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3" fill="var(--muted)"/>`;
       s += key + `<text class="pl-lab" x="${W - M.r + 15}" y="${(l.y + 3.5).toFixed(1)}">${esc(l.text)} <tspan>${l.val}</tspan></text>`;
     }
   }
@@ -1418,13 +1578,244 @@ function drawPlanChart() {
       items.push(item("pl-p", "6 3", PLAN_LABELS[planState.strategy] + " projection"));
     }
     if (targetVal > 0) items.push(item("", "4 4", "Target pace", true));
+    if (wcGross !== null) {
+      const wcNetTxt = wcNet !== null ? ` gross / ${eur(wcNet)} net` : "";
+      items.push(`<span style="display:inline-flex;align-items:center;gap:5px"><svg width="22" height="6" aria-hidden="true"><line x1="1" y1="3" x2="21" y2="3" stroke="var(--crit)" stroke-width="2.5"${targetVal > 0 ? "" : ` stroke-dasharray="3 3"`}/></svg>Worst case ${eur(wcGross)}${wcNetTxt} (${planState.stress}% stress)</span>`);
+    }
     lg.innerHTML = items.join("");
   }
+}
+/* ---- Nightly view: €/night per calendar day ----
+   The WH recommendation against the cost floor and the area — the one
+   comparison Wheelhouse's own chart cannot draw, because it does not know
+   what a night costs to produce. The floor is recomputed HERE from the raw
+   components the server sent (floor_inputs), so the risk preset switches
+   without a refetch; the formula mirrors core/calc.nightFloor:
+   ceil((turnover + travel + margin) / max(1, min_stay)). */
+function nightFloorAt(plan, minStay) {
+  const fi = plan.floor_inputs;
+  if (!fi) return plan.remaining.floor;
+  return Math.ceil((fi.turnover_median + fi.travel_median + fi.margins[planState.risk]) / Math.max(1, minStay || 1));
+}
+function drawNightChart() {
+  const wrap = document.getElementById("planNight");
+  const plan = planState.plan;
+  if (!wrap || !plan) return;
+  const nights = plan.nightly;
+  if (!nights || !nights.length) {
+    wrap.innerHTML = `<div class="empty">Nightly data is missing from this plan response — restart the UI server and reload.</div>`;
+    return;
+  }
+  const N = nights.length, days = plan.days;
+  const todayIdx = days.findIndex(d => d >= plan.today);
+  const pastCount = todayIdx === -1 ? N : todayIdx;
+  const dayW = 20, H = 250;
+  const M = { l: 46, r: 118, t: 16, b: 34 };
+  const W = M.l + N * dayW + M.r;
+  const ph = H - M.t - M.b;
+  const x = i => M.l + (i + 0.5) * dayW;
+  const floors = nights.map((n, i) => (i >= pastCount ? nightFloorAt(plan, n.min_stay) : null));
+  const vals = [100];
+  for (let i = 0; i < N; i++) {
+    for (const v of [nights[i].rec, nights[i].area_high, nights[i].area_median, floors[i]]) {
+      if (typeof v === "number") vals.push(v);
+    }
+  }
+  const ymax = planNiceCeil(Math.max(...vals) * 1.06);
+  const y = v => M.t + (1 - v / ymax) * ph;
+  const pathOf = val => {
+    let d = "", pen = false;
+    for (let i = 0; i < N; i++) {
+      const v = val(i);
+      if (typeof v !== "number") { pen = false; continue; }
+      d += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1);
+      pen = true;
+    }
+    return d;
+  };
+
+  /* Area band (comp-set low–high) as a recessive wash, and the LEAK ZONE:
+     contiguous runs where the WH recommendation sits below the cost floor,
+     tinted with the --neg-1 wash between the two lines. */
+  let bandPolys = "", leakPolys = "";
+  let leakDays = 0;
+  const leakRecs = [];
+  let run = [];
+  const flushBand = () => {
+    if (run.length >= 2) {
+      const top = run.map(i => `${x(i).toFixed(1)},${y(nights[i].area_high).toFixed(1)}`).join(" ");
+      const bot = [...run].reverse().map(i => `${x(i).toFixed(1)},${y(nights[i].area_low).toFixed(1)}`).join(" ");
+      bandPolys += `<polygon points="${top} ${bot}" fill="var(--mid)" opacity="0.75"/>`;
+    }
+    run = [];
+  };
+  for (let i = 0; i < N; i++) {
+    if (typeof nights[i].area_low === "number" && typeof nights[i].area_high === "number") run.push(i);
+    else flushBand();
+  }
+  flushBand();
+  const flushLeak = () => {
+    if (run.length === 1) {
+      const i = run[0];
+      leakPolys += `<rect x="${(x(i) - dayW * 0.35).toFixed(1)}" y="${y(floors[i]).toFixed(1)}" width="${(dayW * 0.7).toFixed(1)}" height="${Math.max(0, y(nights[i].rec) - y(floors[i])).toFixed(1)}" fill="var(--neg-1)"/>`;
+    } else if (run.length >= 2) {
+      const top = run.map(i => `${x(i).toFixed(1)},${y(floors[i]).toFixed(1)}`).join(" ");
+      const bot = [...run].reverse().map(i => `${x(i).toFixed(1)},${y(nights[i].rec).toFixed(1)}`).join(" ");
+      leakPolys += `<polygon points="${top} ${bot}" fill="var(--neg-1)"/>`;
+    }
+    run = [];
+  };
+  for (let i = 0; i < N; i++) {
+    const leak = typeof nights[i].rec === "number" && typeof floors[i] === "number" && nights[i].rec < floors[i];
+    if (leak) { run.push(i); leakDays++; leakRecs.push(nights[i].rec); }
+    else flushLeak();
+  }
+  flushLeak();
+  const recDays = nights.filter(n => typeof n.rec === "number").length;
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Nightly prices for ${esc(plan.property_id)} in ${esc(monthLabel(plan.month))}: Wheelhouse recommendation, cost floor, area median with low-to-high band, booked nights. ${leakDays} night${leakDays === 1 ? "" : "s"} in the leak zone where the recommendation is below the cost floor.">`;
+  for (let q = 0; q <= 4; q++) {
+    const v = (ymax / 4) * q;
+    s += `<line class="pl-grid" x1="${M.l}" x2="${W - M.r}" y1="${y(v).toFixed(1)}" y2="${y(v).toFixed(1)}"/>`;
+    s += `<text class="pl-axis" x="${M.l - 6}" y="${(y(v) + 3.5).toFixed(1)}" text-anchor="end">${eur(v)}</text>`;
+  }
+  s += bandPolys + leakPolys;
+  s += `<path d="${pathOf(i => nights[i].area_median)}" fill="none" stroke="var(--muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+  s += `<path d="${pathOf(i => floors[i])}" fill="none" class="pl-fl" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  s += `<path d="${pathOf(i => nights[i].rec)}" fill="none" class="pl-rc" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`;
+  const lastIdx = pred => { for (let i = N - 1; i >= 0; i--) if (pred(i)) return i; return -1; };
+  const recEnd = lastIdx(i => typeof nights[i].rec === "number");
+  const flEnd = lastIdx(i => typeof floors[i] === "number");
+  const medEnd = lastIdx(i => typeof nights[i].area_median === "number");
+  if (recEnd >= 0) s += `<circle class="pl-rcfill" cx="${x(recEnd).toFixed(1)}" cy="${y(nights[recEnd].rec).toFixed(1)}" r="4" stroke="var(--surface)" stroke-width="2"/>`;
+  if (flEnd >= 0) s += `<circle class="pl-flfill" cx="${x(flEnd).toFixed(1)}" cy="${y(floors[flEnd]).toFixed(1)}" r="4" stroke="var(--surface)" stroke-width="2"/>`;
+  const xt = [0, 4, 9, 14, 19, 24, N - 1];
+  for (const i of [...new Set(xt.filter(i => i >= 0 && i < N))]) {
+    s += `<text class="pl-axis" x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${i + 1}</text>`;
+  }
+  /* Booked nights: ticks under the axis — bookings are events here, not a price series. */
+  for (let i = 0; i < N; i++) {
+    if (nights[i].booked_nights > 0) {
+      s += `<line x1="${x(i).toFixed(1)}" x2="${x(i).toFixed(1)}" y1="${(H - M.b + 4).toFixed(1)}" y2="${(H - M.b + 11).toFixed(1)}" stroke="var(--ink-2)" stroke-width="2"/>`;
+    }
+  }
+  if (pastCount > 0 && pastCount < N) {
+    const bx = M.l + pastCount * dayW;
+    s += `<line class="pl-grid" x1="${bx.toFixed(1)}" x2="${bx.toFixed(1)}" y1="${M.t}" y2="${H - M.b}"/>`;
+    s += `<text class="pl-axis" x="${bx.toFixed(1)}" y="${M.t - 4}" text-anchor="middle">today</text>`;
+  }
+  /* Direct end labels with the same leader-line collision handling as the monthly chart. */
+  const labels = [];
+  if (recEnd >= 0) labels.push({ v: nights[recEnd].rec, cls: "pl-rcfill", text: "WH rec", val: eur(nights[recEnd].rec) });
+  if (flEnd >= 0) labels.push({ v: floors[flEnd], cls: "pl-flfill", text: "Cost floor", val: eur(floors[flEnd]) });
+  if (medEnd >= 0) labels.push({ v: nights[medEnd].area_median, cls: "", text: "Area median", val: eur(nights[medEnd].area_median) });
+  labels.forEach(l => { l.ty = y(l.v); l.y = Math.max(M.t + 5, Math.min(H - M.b - 2, l.ty)); });
+  labels.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < labels.length; i++) {
+    if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+  }
+  for (const l of labels) {
+    if (Math.abs(l.y - l.ty) > 2) {
+      s += `<path d="M${(W - M.r + 6).toFixed(1)} ${l.ty.toFixed(1)}L${(W - M.r + 8).toFixed(1)} ${l.y.toFixed(1)}" fill="none" stroke="var(--muted)" stroke-width="1"/>`;
+    }
+  }
+  for (const l of labels) {
+    const key = l.cls
+      ? `<circle class="${l.cls}" cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3"/>`
+      : `<circle cx="${W - M.r + 8}" cy="${l.y.toFixed(1)}" r="3" fill="var(--muted)"/>`;
+    s += key + `<text class="pl-lab" x="${W - M.r + 15}" y="${(l.y + 3.5).toFixed(1)}">${esc(l.text)} <tspan>${l.val}</tspan></text>`;
+  }
+  s += `<line id="nightCross" x1="0" x2="0" y1="${M.t}" y2="${H - M.b}" stroke="var(--muted)" stroke-width="1" style="display:none" pointer-events="none"/>`;
+  s += `<rect id="nightOverlay" x="${M.l}" y="${M.t}" width="${N * dayW}" height="${ph}" fill="transparent"/>`;
+  s += `</svg>`;
+  wrap.innerHTML = s;
+
+  const svgEl = wrap.querySelector("svg");
+  const overlay = svgEl.querySelector("#nightOverlay");
+  const cross = svgEl.querySelector("#nightCross");
+  const onMove = e => {
+    const rect = svgEl.getBoundingClientRect();
+    if (rect.width === 0) return;
+    const px = (e.clientX - rect.left) * (W / rect.width);
+    let i = Math.floor((px - M.l) / dayW);
+    i = Math.max(0, Math.min(N - 1, i));
+    const n = nights[i];
+    const cx = x(i).toFixed(1);
+    cross.setAttribute("x1", cx);
+    cross.setAttribute("x2", cx);
+    cross.style.display = "";
+    const leak = typeof n.rec === "number" && typeof floors[i] === "number" && n.rec < floors[i];
+    const rows = [
+      ["WH recommendation", typeof n.rec === "number" ? eur(n.rec) : "—"],
+      ["Cost floor", typeof floors[i] === "number" ? eur(floors[i]) : "— (past)"],
+      ["Area median", typeof n.area_median === "number" ? eur(n.area_median) : "—"],
+    ];
+    if (typeof n.area_low === "number" && typeof n.area_high === "number") rows.push(["Area low–high", `${eur(n.area_low)}–${eur(n.area_high)}`]);
+    if (n.min_stay) rows.push(["Min stay", `${n.min_stay} night${n.min_stay === 1 ? "" : "s"}`]);
+    rows.push(["Status", n.booked_nights > 0 ? "booked" : i < pastCount ? "past, unbooked" : "open"]);
+    showTip(e, `<b>${esc(n.date)}${leak ? ' — <span style="color:var(--crit)">below cost floor</span>' : ""}</b>` +
+      rows.map(([l, v]) => `<div class="row"><span>${esc(l)}</span><span>${v}</span></div>`).join(""));
+  };
+  overlay.addEventListener("pointermove", onMove);
+  overlay.addEventListener("pointerdown", onMove);
+  overlay.addEventListener("pointerleave", () => { cross.style.display = "none"; hideTip(); });
+
+  const lg = document.getElementById("planNightLegend");
+  if (lg) {
+    const line = (cls, label, muted) =>
+      `<span style="display:inline-flex;align-items:center;gap:5px"><svg width="22" height="6" aria-hidden="true"><line x1="1" y1="3" x2="21" y2="3" ${muted ? `stroke="var(--muted)" stroke-width="1.5"` : `class="${cls}" stroke-width="2.5"`}/></svg>${esc(label)}</span>`;
+    lg.innerHTML = [
+      line("pl-rc", "WH recommendation €/night"),
+      line("pl-fl", "Cost floor €/night"),
+      line("", "Area median", true),
+      `<span class="sw" style="background:var(--mid)"></span>area low–high`,
+      `<span class="sw" style="background:var(--neg-1)"></span>leak zone — recommendation below the cost floor`,
+      `<span style="display:inline-flex;align-items:center;gap:5px"><svg width="10" height="12" aria-hidden="true"><line x1="5" y1="2" x2="5" y2="10" stroke="var(--ink-2)" stroke-width="2"/></svg>booked night</span>`,
+    ].join("");
+  }
+
+  const noteEl = document.getElementById("planNightNote");
+  if (noteEl) {
+    const fi = plan.floor_inputs;
+    const fl = fi && fi.floors ? fi.floors[planState.risk] : plan.remaining.floor;
+    const margin = fi && fi.margins ? fi.margins[planState.risk] : null;
+    const anyAmort = nights.some(n => (n.min_stay || 1) > 1);
+    const floorDesc = fi
+      ? `turnover €${Math.round(fi.turnover_median)} + travel €${Math.round(fi.travel_median)} + ${esc(planState.risk)} margin €${margin}${anyAmort ? ", amortized over the min stay where one applies" : ""} (${esc(fi.basis)})`
+      : esc(plan.remaining.turnover_basis);
+    if (leakDays > 0) {
+      noteEl.innerHTML = `<span style="color:var(--crit);font-weight:600">Leak zone: ${leakDays} of ${recDays} recommended nights</span> sit below your cost floor — Wheelhouse recommends ${eur(Math.min(...leakRecs))}–${eur(Math.max(...leakRecs))} on those nights against a ${eur(fl)} floor. Sold at the recommendation, those nights don’t cover what they cost to produce plus your minimum margin. Floor = ${floorDesc}.`;
+    } else if (recDays > 0) {
+      noteEl.innerHTML = `Every recommended night clears your ${eur(fl)} cost floor — no leak zone this month. Floor = ${floorDesc}.`;
+    } else {
+      noteEl.innerHTML = `No Wheelhouse nightly recommendations fall inside this month${plan.mode === "demo" ? " (demo mode has none)" : " (the recommendation horizon is ~30 days ahead)"} — the floor line still shows what an open night must earn: ${eur(fl)}. Floor = ${floorDesc}.`;
+    }
+  }
+}
+function renderNightTable(el, plan) {
+  const days = plan.days, N = days.length;
+  const todayIdx = days.findIndex(d => d >= plan.today);
+  const pastCount = todayIdx === -1 ? N : todayIdx;
+  el.innerHTML = `<table>
+    <tr><th>Day</th><th class="num">WH rec €/night</th><th class="num">Cost floor €/night</th><th class="num">Area median</th><th class="num">Area low–high</th><th class="num">Min stay</th><th>Status</th></tr>` +
+    plan.nightly.map((n, i) => {
+      const fl = i >= pastCount ? nightFloorAt(plan, n.min_stay) : null;
+      const leak = typeof n.rec === "number" && typeof fl === "number" && n.rec < fl;
+      const status = n.booked_nights > 0 ? "booked" : i < pastCount ? "past" : "open";
+      return `<tr><td>${esc(n.date)}</td>
+        <td class="num${leak ? " neg" : ""}">${typeof n.rec === "number" ? eur(n.rec) : "—"}</td>
+        <td class="num">${typeof fl === "number" ? eur(fl) : "—"}</td>
+        <td class="num">${typeof n.area_median === "number" ? eur(n.area_median) : "—"}</td>
+        <td class="num">${typeof n.area_low === "number" && typeof n.area_high === "number" ? `${eur(n.area_low)}–${eur(n.area_high)}` : "—"}</td>
+        <td class="num">${n.min_stay ? n.min_stay : "—"}</td>
+        <td>${status}${leak ? ' · <span class="neg">below floor</span>' : ""}</td></tr>`;
+    }).join("") + `</table>`;
 }
 function renderPlanTable() {
   const el = document.getElementById("planTable");
   const plan = planState.plan;
   if (!el || !plan) return;
+  if (planState.view === "nightly" && plan.nightly && plan.nightly.length) return renderNightTable(el, plan);
   const days = plan.days, N = days.length;
   const booked = plan.actual.booked_cum;
   const proj = plan.projections[planState.strategy].series;
@@ -1451,7 +1842,10 @@ addEventListener("resize", () => {
   clearTimeout(planResizeT);
   planResizeT = setTimeout(() => {
     const pp = document.getElementById("planPanel");
-    if (pp && !pp.hidden && planState.plan) drawPlanChart();
+    if (pp && !pp.hidden && planState.plan) {
+      if (planState.view === "monthly") drawPlanChart();
+      else drawNightChart();
+    }
   }, 200);
 });
 

@@ -571,7 +571,10 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
   // c) fill push — dist/core/simulate.js:n fill-gaps-sääntö: KAIKKI aukot
   // alennushinnalla, 100 % täyttö = yläraja, ei ennuste.
   const pushExtra = new Map();
-  const pushCosts = [];
+  /* Yksi rivi per täytetty yö {gross, cost} — worst case tarvitsee PARIN
+   * (mitkä alennusyöt ovat omaa kustannustaan halvempia), pelkkä
+   * kustannuslista ei riitä. */
+  const pushNights = [];
   let pushBasisNote = null;
   let pushPriceNote = null;
   if (gapStart !== null && gapDates.length > 0) {
@@ -583,7 +586,7 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
         if (typeof r0.reservation_id === "string" && r0.reservation_id.startsWith(prefix)) {
           pushExtra.set(r0.checkin, r0.gross_revenue);
           const c = sim.costs.get(r0.reservation_id);
-          pushCosts.push(c ? calc.totalCost(c) : perNightCost);
+          pushNights.push({ gross: r0.gross_revenue, cost: c ? calc.totalCost(c) : perNightCost });
         }
       }
       if (pushExtra.size > 0) {
@@ -606,7 +609,7 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
       for (const n of perNight)
         if (n.price !== null) {
           pushExtra.set(n.date, n.price * 0.6);
-          pushCosts.push(perNightCost);
+          pushNights.push({ gross: n.price * 0.6, cost: perNightCost });
         }
       pushBasisNote =
         "Every open night is filled at 40% off its night price (the simulate module needs bookings in the remaining window to estimate an average rate — none found, so per-night prices are discounted directly).";
@@ -622,7 +625,7 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
     label: "Fill push",
     series: pushSeries,
     end_gross: Math.round(pushGross),
-    end_net_estimate: Math.round(pushGross - sumOf(pushCosts)),
+    end_net_estimate: Math.round(pushGross - sumOf(pushNights.map((n) => n.cost))),
     expected_filled_nights: pushExtra.size,
     assumptions: monthOverNote
       ? [monthOverNote]
@@ -632,6 +635,108 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
           ...(pushPriceNote ? [pushPriceNote] : []),
           costAssumption,
         ],
+  };
+
+  /* -- Worst caset (MAXIMIN) --------------------------------------------
+   * Jokainen strategia saa projektion RINNALLE pahimman tapauksen: pelkät
+   * TAATUT komponentit (jo varattu myynti) + käyttäjän valitsema
+   * peruutusstressi booked-aheadiin. Ei todennäköisyyksiä — assumptions
+   * sanovat joka luvun lähteen ääneen. Lasketaan kaikilla kolmella
+   * stressitasolla kerralla, jotta UI:n stressivalitsin (ja cache-osuma)
+   * ei vaadi uutta hakua. */
+  const existingTurnoverCost = sumOf(
+    monthRes.map((r) => {
+      const c = costsById.get(r.reservation_id);
+      return c ? calc.totalCost(c) : perNightCost;
+    }),
+  );
+  const existingCostNote =
+    monthRes.length === 0
+      ? "No booked stays touch this month, so there are no existing turnover costs to subtract."
+      : `Net = worst-case gross − one turnover per already-booked stay (€${Math.round(existingTurnoverCost)} total for ${monthRes.length} stay${monthRes.length === 1 ? "" : "s"}; matched cost rows where available, otherwise €${Math.round(perNightCost)} each). Stays straddling the month keep their full turnover cost — conservative.`;
+  const belowCostNights = pushNights.filter((n) => n.gross < n.cost);
+  const belowCostGross = sumOf(belowCostNights.map((n) => n.gross));
+  const belowCostLoss = sumOf(belowCostNights.map((n) => n.cost - n.gross));
+  const worstCases = {};
+  for (const s of [0, 10, 25]) {
+    const keep = 1 - s / 100;
+    const baseGross = bookedToDateGross + bookedAheadGross * keep;
+    const baseNet = baseGross - existingTurnoverCost;
+    const stressNote =
+      s === 0
+        ? "Stress test off: all currently booked-ahead gross is assumed to stand."
+        : `Stress test: assume ${s}% of booked-ahead gross (€${Math.round(bookedAheadGross)} ahead) cancels — a what-if you chose, not a probability we computed.`;
+    // Jaettu etuliite EI sisällä "zero new bookings" -väitettä, koska fill_pushin
+    // worst case nimenomaan olettaa uusia (tappiollisia) öitä myydyksi. Kukin
+    // strategia lisää oman ensimmäisen rivinsä, joka kuvaa juuri sen skenaarion.
+    const sharedTail = [stressNote, existingCostNote];
+    const noNewBookingsLead = `Worst case = zero new bookings: only what is already on the books${s > 0 ? ", minus the stress haircut" : ""}.`;
+    const prefix = monthOverNote ? [monthOverNote] : [];
+    worstCases[String(s)] = {
+      current_pace: {
+        end_gross: Math.round(baseGross),
+        end_net_estimate: Math.round(baseNet),
+        assumptions: [...prefix, noNewBookingsLead, ...sharedTail, "This is the month's true booked floor — no strategy can end below it without cancellations beyond the stress you chose."],
+      },
+      floor_guard: {
+        end_gross: Math.round(baseGross),
+        end_net_estimate: Math.round(baseNet),
+        assumptions: [
+          ...prefix,
+          noNewBookingsLead,
+          ...sharedTail,
+          `Floors do not add bookings, so the worst case equals current pace — and with floors applied, any open night that does sell is at or above €${floor} (turnover + travel + the ${riskChoice} margin), so extra bookings cannot drag the net below this line.`,
+        ],
+      },
+      fill_push: {
+        end_gross: Math.round(baseGross + belowCostGross),
+        end_net_estimate: Math.round(baseNet - belowCostLoss),
+        below_cost_nights: belowCostNights.length,
+        below_cost_loss: Math.round(belowCostLoss),
+        assumptions: [
+          ...prefix,
+          belowCostNights.length > 0
+            ? `Worst case = already-booked nights${s > 0 ? " (minus the stress haircut)" : ""} plus the ${belowCostNights.length} below-cost discounted night${belowCostNights.length === 1 ? "" : "s"} selling — and nothing else. Those ${belowCostNights.length} night${belowCostNights.length === 1 ? " is" : "s are"} priced below their own turnover cost, so the worst case assumes demand takes exactly those (−€${Math.round(belowCostLoss)} net) while every profitable discounted night goes unsold.`
+            : `Worst case = zero new bookings: only what is already on the books${s > 0 ? ", minus the stress haircut" : ""}. No discounted night is priced below its own turnover cost this month, so the fill-push worst case equals current pace.`,
+          ...sharedTail,
+        ],
+      },
+    };
+  }
+
+  /* -- Nightly view: per-yö raakakomponentit -----------------------------
+   * Kattaa KAIKKI kuun päivät (remaining.nights kattaa vain aukot), jotta
+   * selain voi piirtää päivägraafin ja laskea lattian eri risk-preseteillä
+   * ja min-stay-amortisoinnilla ILMAN uutta hakua. Lattiakaava on sama kuin
+   * core/calc.nightFloor: ceil((turnover + travel + margin) / max(1, min_stay)). */
+  const areaRowByDate = new Map((area.pricing ?? []).map((p) => [p.date, p]));
+  const nightly = days.map((d, i) => {
+    const rec = recByDate.get(d);
+    const ap = areaRowByDate.get(d);
+    return {
+      date: d,
+      rec: rec ? rec.price : null,
+      min_stay: rec?.min_stay ?? globalMinStay,
+      booked_nights: dailyNights[i],
+      area_median: ap ? ap.median : null,
+      area_low: ap ? ap.low : null,
+      area_high: ap ? ap.high : null,
+    };
+  });
+  const minMarginBase = config.minMargin(process.env);
+  const floorMargins = {};
+  const floorsByRisk = {};
+  for (const rk of ["conservative", "recommended", "aggressive"]) {
+    floorMargins[rk] = risk.riskAdjustedMargin(minMarginBase, rk);
+    floorsByRisk[rk] = Math.ceil(calc.gapNightFloor(est.turnover, est.travel, floorMargins[rk]));
+  }
+  const floorInputs = {
+    turnover_median: Math.round(est.turnover * 100) / 100,
+    travel_median: Math.round(est.travel * 100) / 100,
+    min_margin: minMarginBase,
+    margins: floorMargins,
+    floors: floorsByRisk,
+    basis: turnoverBasis,
   };
 
   /* -- Historia: kpis/monthly -------------------------------------------
@@ -730,6 +835,11 @@ async function buildMonthPlan(propertyId, month, riskChoice) {
     area,
     fill: { rate: Math.round(fill.rate * 1000) / 1000, source: fill.source },
     projections: { current_pace: currentPace, floor_guard: floorGuard, fill_push: fillPush },
+    /* worst_cases kaikilla stressitasoilla; handler poimii pyydetyn tason
+     * worst_case-kenttään — stressin vaihto ei koskaan vaadi uutta buildia. */
+    worst_cases: worstCases,
+    nightly,
+    floor_inputs: floorInputs,
     recommended_targets: {
       current_pace: round50(currentPace.end_gross),
       floor_guard: round50(floorGuard.end_gross),
@@ -882,10 +992,23 @@ async function handleApi(req, res, url) {
     if (!RISKS.has(riskChoice)) {
       throw new BadRequest('Invalid risk: use "conservative", "recommended" or "aggressive"');
     }
+    /* Stress = käyttäjän valitsema booked-ahead-peruutusprosentti worst
+     * caseille. Body cachetetaan ILMAN stressiä (worst_cases kantaa kaikki
+     * kolme tasoa) — stressin vaihto poimii vain toisen valmiin haaran. */
+    const stressRaw = url.searchParams.get("stress") ?? "0";
+    if (!/^(0|10|25)$/.test(stressRaw)) {
+      throw new BadRequest("Invalid stress: use 0, 10 or 25 (percent of booked-ahead gross assumed to cancel)");
+    }
+    const withStress = (b, cached) => ({
+      ...b,
+      cached,
+      stress: Number(stressRaw),
+      worst_case: b.worst_cases ? b.worst_cases[stressRaw] : undefined,
+    });
     const cacheKey = `${pid}\u0000${month}\u0000${riskChoice}`;
     const hit = planCache.get(cacheKey);
     if (hit && Date.now() - hit.at < PLAN_TTL_MS) {
-      return json(res, 200, { ...hit.body, cached: true });
+      return json(res, 200, withStress(hit.body, true));
     }
     const body = await buildMonthPlan(pid, month, riskChoice);
     planCache.set(cacheKey, { at: Date.now(), body });
@@ -893,7 +1016,7 @@ async function handleApi(req, res, url) {
       const oldest = [...planCache.entries()].sort((a, b) => a[1].at - b[1].at)[0];
       if (oldest) planCache.delete(oldest[0]);
     }
-    return json(res, 200, { ...body, cached: false });
+    return json(res, 200, withStress(body, false));
   }
 
   /* POST, EI GET: runCheckAlerts KIRJOITTAA seen_bookings.json:iin (baseline
