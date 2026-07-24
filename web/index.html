@@ -89,6 +89,22 @@
   .tile .label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
   .tile .value { font-size: 29px; font-weight: 650; margin-top: 6px; letter-spacing: -0.015em; line-height: 1.05; font-variant-numeric: tabular-nums; }
   .tile .note { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.4; }
+  /* Katekortti — korostettu, iso %, pystysuora erittely (idea CleanHubin
+     Kate-kortista; luvut lasketaan omasta datasta). */
+  .margin-tile {
+    background: color-mix(in oklab, #0f7a3d 7%, var(--surface));
+    border-color: color-mix(in oklab, #0f7a3d 28%, var(--border));
+  }
+  .margin-tile .value { color: #0b6a34; }
+  @media (prefers-color-scheme: dark) {
+    :root:where(:not([data-theme="light"])) .margin-tile .value { color: #46c27a; }
+  }
+  :root[data-theme="dark"] .margin-tile .value { color: #46c27a; }
+  .margin-tile .mbreak { margin-top: 9px; padding-top: 8px; border-top: 1px solid var(--grid); font-size: 12px; }
+  .margin-tile .mbreak .row { display: flex; justify-content: space-between; gap: 12px; padding: 2px 0; color: var(--ink-2); font-variant-numeric: tabular-nums; }
+  .margin-tile .mbreak .row.neg span:last-child { color: var(--crit); }
+  .margin-tile .mbreak .row.tot { font-weight: 650; color: var(--ink); border-top: 1px solid var(--grid); margin-top: 3px; padding-top: 5px; }
+
   .tile .leak { color: var(--crit); }
   .tile .ok { color: var(--good-text); }
 
@@ -712,11 +728,23 @@ function renderDashboard(d) {
         <div class="note">${pct(a.leak_pct)} of booked nights · ${a.negative_reservations.length} booking${a.negative_reservations.length === 1 ? "" : "s"}</div></div>`
     : `<div class="tile"><div class="label">Leak</div><div class="value ok">€0</div>
         <div class="note">no net-negative bookings</div></div>`;
+  // Katekortti: iso prosentti + pystysuora erittely (brutto − vaihtokustannus =
+  // netto). Marginaali on laskettu, ei arvioitu: net / gross. Nolla-brutolla
+  // prosenttia ei ole olemassa → ei näytetä keksittyä lukua.
+  const marginPct = t.gross > 0 ? (t.net / t.gross) * 100 : null;
+  const marginTile =
+    `<div class="tile margin-tile">
+      <div class="label">Margin after turnover</div>
+      <div class="value">${marginPct === null ? "—" : pct(marginPct)}</div>
+      <div class="mbreak">
+        <div class="row"><span>Gross</span><span>${eur(t.gross)}</span></div>
+        <div class="row neg"><span>− Turnover costs</span><span>−${eur(t.costs)}</span></div>
+        <div class="row tot"><span>Net kept</span><span>${eur(t.net)}</span></div>
+      </div>
+    </div>`;
   const otherTiles =
     `<div class="tile"><div class="label">Occupancy</div><div class="value">${pct(t.occupancy_pct)}</div>
-      <div class="note">${t.booked_nights} booked · ${t.gap_nights} gap nights</div></div>
-    <div class="tile"><div class="label">Gross → Net</div><div class="value">${eur(t.net)}</div>
-      <div class="note">${eur(t.gross)} − ${eur(t.costs)} turnover costs</div></div>`;
+      <div class="note">${t.booked_nights} booked · ${t.gap_nights} gap nights</div></div>` + marginTile;
   document.getElementById("kpis").innerHTML = a.leak_eur > 0 ? leakTile + otherTiles : otherTiles + leakTile;
 
   // Kattavuus: kun iso osa listauksista ei palauta varauksia (livenä 60/73),
