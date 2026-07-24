@@ -1,5 +1,7 @@
 # Loom script — night-margin-mcp (2:30)
 
+> **Vanhentunut 24.7. — käytä `docs/demo-day-runbook.md` Demo Dayn live-demoon.** Tämän käsikirjoituksen `compare_strategies`-luvut (€111,699 / €18,009 / €1,801) ovat elävästä 73 kohteen portfoliosta, EIVÄT demodatasta: demodatalla kesäkuun ikkuna näyttää €26,797 gross / €3,977 more gross / €433 less net. Gap-repliikki "filling loses sixteen euros" on väärä — tuloste sanoo "€16 below floor; filling would net +€9 after costs" — ja 2026-06-23 on nyt menneisyydessä (tuloste lisää "this night is in the past"); käytä demodatalla päivää 2026-08-26 kohteelle demo-1br-03.
+
 Submission video for the Wheelhouse Revenue Hackathon. Category: **Best Build from a Property Manager**. Target length **2:30** (form allows 2–3 min — never exceed 3:00). Recorded by Miki, own voice.
 
 Pace: ~150 words/min. Short sentences. Read numbers **off the screen** — every number quoted below is the synthetic demo output, so the script works verbatim on the zero-config fallback path. On the real portfolio, keep the sentence shape and swap in the on-screen numbers.
