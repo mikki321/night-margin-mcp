@@ -1539,8 +1539,36 @@ function planHistoryHtml(plan) {
   }
   for (const n of h.notes) out += `<div class="hint">${esc(n)}</div>`;
   if (!withData.length && !h.notes.length) out += `<div class="hint">No history rows returned for the reference months.</div>`;
+  // Ei omaa historiaa → nojaa ALUEEN verrokkeihin, ei jätetä tyhjäksi. Uusi
+  // kohde ei ole "ei dataa" vaan "ei omaa dataa" — alueen saman ajan verrokit
+  // ovat paras käytettävissä oleva vertailukohta, ja se sanotaan ääneen.
+  if (!withData.length) out += areaBaselineHtml(plan);
   out += `</div>`;
   return out;
+}
+/** Aluevertailu kun kohteella ei ole omaa historiaa. Vain oikeaa dataa
+ *  (neighborhood/pricing + neighborhood/occupancy); ei arvioita, ei comp_set-
+ *  placeholdereita. Kertoo selvästi että kyse on alueesta, ei tästä kohteesta. */
+function areaBaselineHtml(plan) {
+  const a = plan.area || {};
+  const pr = (a.pricing || []).filter(p => typeof p.median === "number");
+  const oc = (a.occupancy || []).filter(o => typeof o.occupancy === "number");
+  if (!pr.length && !oc.length) return "";
+  const med = pr.length ? pr.map(p => p.median).sort((x, y) => x - y)[Math.floor(pr.length / 2)] : null;
+  const lo = pr.length ? Math.min(...pr.map(p => p.low ?? p.median)) : null;
+  const hi = pr.length ? Math.max(...pr.map(p => p.high ?? p.median)) : null;
+  const comps = Math.max(0, ...pr.map(p => p.listings_count || 0));
+  const occAvg = oc.length ? oc.reduce((s, o) => s + o.occupancy, 0) / oc.length : null;
+  const rows = [];
+  if (med != null) rows.push(["Median price / night", eur(med) + (lo != null && hi != null ? ` (range ${eur(lo)}–${eur(hi)})` : "")]);
+  if (occAvg != null) rows.push(["Comp set occupancy", pct(occAvg * 100)]);
+  if (comps) rows.push(["Comparable listings", String(comps)]);
+  return `<div style="margin-top:10px">
+    <b style="font-size:12px;color:var(--ink-2)">Area baseline — comparable listings, same area, same nights</b>
+    <div class="hint" style="margin:4px 0 6px">This listing has no past performance of its own yet, so the closest honest reference is what similar properties nearby are doing over the same nights. This is the area, not this property.</div>
+    <div class="tablewrap"><table>${rows.map(r =>
+      `<tr><td>${esc(r[0])}</td><td class="num">${r[1]}</td></tr>`).join("")}</table></div>
+  </div>`;
 }
 function renderPlanContent() {
   const plan = planState.plan;
